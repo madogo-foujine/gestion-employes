@@ -1059,13 +1059,17 @@ class EmployeeApp(tk.Tk):
         row.pack(fill=tk.X, pady=(0, 12))
 
         self.stat_effectif = tk.StringVar(value="0")
+        self.stat_brut = tk.StringVar(value="0,00 DH")
         self.stat_masse = tk.StringVar(value="0,00 DH")
         self.stat_moyen = tk.StringVar(value="0,00 DH")
+        self.stat_ir = tk.StringVar(value="0,00 DH")
 
         chips = [
             ("👥", "Effectif", self.stat_effectif, COL["info"]),
-            ("💰", "Masse salariale (net)", self.stat_masse, COL["accent"]),
-            ("📊", "Salaire net moyen", self.stat_moyen, COL["brand2"]),
+            ("💰", "Masse brute", self.stat_brut, COL["brand2"]),
+            ("💵", "Masse nette", self.stat_masse, COL["accent"]),
+            ("📊", "Net moyen", self.stat_moyen, COL["brand2"]),
+            ("🧾", "Total IR", self.stat_ir, COL["danger"]),
         ]
         for icon, title, var, color in chips:
             chip = tk.Frame(row, bg=COL["surface"], highlightbackground=COL["border"],
@@ -1083,13 +1087,17 @@ class EmployeeApp(tk.Tk):
                      font=(FONT, 14, "bold")).pack(anchor=tk.W)
 
     def update_dashboard(self):
-        nets = [compute_payroll(r)["net"] for r in self.records]
-        n = len(nets)
-        total = sum(nets)
-        avg = total / n if n else 0
+        payrolls = [compute_payroll(r) for r in self.records]
+        n = len(payrolls)
+        total_net = sum(p["net"] for p in payrolls)
+        total_brut = sum(p["brut"] for p in payrolls)
+        total_ir = sum(p["ir"] for p in payrolls)
+        avg = total_net / n if n else 0
         self.stat_effectif.set(str(n))
-        self.stat_masse.set(fmt_money(total))
+        self.stat_brut.set(fmt_money(total_brut))
+        self.stat_masse.set(fmt_money(total_net))
         self.stat_moyen.set(fmt_money(avg))
+        self.stat_ir.set(fmt_money(total_ir))
 
 
     def _build_body(self):
