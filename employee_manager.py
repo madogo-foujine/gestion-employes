@@ -16,8 +16,20 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import ttkbootstrap as tb
 
+try:
+    from ttkbootstrap.widgets import ToastNotification, ToolTip
+    HAS_TB_EXTRAS = True
+except Exception:  # noqa: BLE001
+    try:
+        from ttkbootstrap.toast import ToastNotification
+        from ttkbootstrap.tooltip import ToolTip
+        HAS_TB_EXTRAS = True
+    except Exception:  # noqa: BLE001
+        HAS_TB_EXTRAS = False
+
 THEME_LIGHT = "flatly"
 THEME_DARK = "darkly"
+APP_VERSION = "1.1"
 
 try:
     from openpyxl import Workbook, load_workbook
@@ -193,6 +205,7 @@ def apply_config_settings(cfg: dict) -> None:
 FIELDS = [
     ("id",              "ID",                 "base",   "readonly"),
     ("photo",           "Photo",              "meta",   "hidden"),
+    ("archive",         "Archivé",            "meta",   "hidden"),
     ("nom",             "Nom complet",        "base",   "text"),
     ("cin",             "CIN",                "base",   "text"),
     ("poste",           "Poste",              "base",   "text"),
@@ -528,6 +541,29 @@ class AdvancesStore:
         return round(sum(a.get("solde", 0) for a in self.list(emp_id)), 2)
 
 
+class AuditStore:
+    def __init__(self, excel_path: Path):
+        self.path = Path(excel_path).parent / "audit.json"
+
+    def entries(self) -> list:
+        try:
+            return json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+
+    def log(self, user: str, action: str, detail: str):
+        data = self.entries()
+        data.append({
+            "time": dt.datetime.now().isoformat(timespec="seconds"),
+            "user": user, "action": action, "detail": detail,
+        })
+        try:
+            self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+        except OSError:
+            log.exception("Echec de l'ecriture du journal d'audit")
+
+
 class EmployeeApp(tb.Window):
     def __init__(self):
         cfg = load_config()
@@ -544,24 +580,32 @@ class EmployeeApp(tb.Window):
         COL.update(PALETTES.get(self.theme, PALETTES["light"]))
         self.configure(bg=COL["bg"])
 
+        self.withdraw()
+        self._show_splash()
+
         self.store = ExcelStore(DEFAULT_FILE)
         self.pointage = PointageStore(DEFAULT_FILE)
         self.history = HistoryStore(DEFAULT_FILE)
         self.advances = AdvancesStore(DEFAULT_FILE)
+        self.audit = AuditStore(DEFAULT_FILE)
         self.records: list[dict] = []
         self.vars: dict[str, tk.StringVar] = {}
         self.detail: dict[str, tk.StringVar] = {}
         self.current_index: int | None = None
 
         if not self._require_login():
+            self._close_splash()
             self.destroy()
             return
 
         self.build_ui()
         self.reload()
+        self.after(1500, self._close_splash)
 
     def build_ui(self):
         for child in self.winfo_children():
+            if child is getattr(self, "_splash", None):
+                continue
             child.destroy()
         self.vars = {}
         self.detail = {}
@@ -572,6 +616,7 @@ class EmployeeApp(tb.Window):
         self._build_body()
         self._build_statusbar()
         self.path_var.set(str(self.store.path))
+        self._bind_shortcuts()
 
     def toggle_theme(self):
         self.theme = "dark" if self.theme == "light" else "light"
@@ -815,6 +860,10 @@ class EmployeeApp(tb.Window):
                            command=self.open_simulateur)
         m_view.add_command(label="🗂  Registre des documents",
                            command=self.open_registry)
+        m_view.add_command(label="🗄  Employés archivés",
+                           command=self.open_archived)
+        m_view.add_command(label="📝  Journal des modifications",
+                           command=self.open_audit)
         m_view.add_command(label="🔔  Alertes RH", command=self.open_alerts)
         m_view.add_separator()
         theme_lbl = "☀️  Thème clair" if self.theme == "dark" else "🌙  Thème sombre"
@@ -1052,25 +1101,40 @@ class EmployeeApp(tb.Window):
         bar.pack(side=tk.TOP, fill=tk.X)
         bar.pack_propagate(False)
 
-        quick = [("📂  Fichier", self.choose_file), ("🔄  Rafraîchir", self.reload),
-                 ("📅  Pointage", self.open_pointage), ("🧾  PDF", self.export_pdf),
-                 ("📚  Tous PDF", self.export_all_pdf),
-                 ("📉  Évolution", self.open_evolution)]
+        quick = [("📂  Fichier", self.choose_file, "Ouvrir un fichier Excel"),
+                 ("🔄  Rafraîchir", self.reload, "Recharger les données"),
+                 ("📅  Pointage", self.open_pointage, "Pointage mensuel"),
+                 ("🧾  PDF", self.export_pdf, "Bulletin de paie PDF (Ctrl+P)"),
+                 ("📚  Tous PDF", self.export_all_pdf, "Tous les bulletins PDF"),
+                 ("📉  Évolution", self.open_evolution, "Évolution de la masse salariale")]
         first = True
-        for label, cmd in quick:
-            tb.Button(bar, text=label, bootstyle="light", command=cmd).pack(
-                side=tk.LEFT, padx=((12, 4) if first else 4), pady=8)
+        for label, cmd, tip in quick:
+            b = tb.Button(bar, text=label, bootstyle="light", command=cmd)
+            b.pack(side=tk.LEFT, padx=((12, 4) if first else 4), pady=8)
+            self._tip(b, tip)
             first = False
 
         self.path_var = tk.StringVar()
         theme_icon = "☀️" if self.theme == "dark" else "🌙"
-        tb.Button(bar, text=theme_icon, bootstyle="light",
-                   command=self.toggle_theme).pack(side=tk.RIGHT, padx=4, pady=8)
-        tb.Button(bar, text="🔐", bootstyle="light",
-                   command=self.manage_password).pack(side=tk.RIGHT, padx=4, pady=8)
+        bt = tb.Button(bar, text=theme_icon, bootstyle="light",
+                       command=self.toggle_theme)
+        bt.pack(side=tk.RIGHT, padx=4, pady=8)
+        self._tip(bt, "Thème clair / sombre")
+        bp = tb.Button(bar, text="🔐", bootstyle="light",
+                       command=self.manage_password)
+        bp.pack(side=tk.RIGHT, padx=4, pady=8)
+        self._tip(bp, "Mot de passe administrateur")
         self.alert_btn = tb.Button(bar, text="🔔  Alertes", bootstyle="warning",
                                     command=self.open_alerts)
         self.alert_btn.pack(side=tk.RIGHT, padx=4, pady=8)
+        self._tip(self.alert_btn, "Alertes RH (anniversaires, fins de contrat)")
+
+    def _tip(self, widget, text):
+        if HAS_TB_EXTRAS:
+            try:
+                ToolTip(widget, text=text, bootstyle="secondary-inverse")
+            except Exception:  # noqa: BLE001
+                pass
 
 
     def _build_dashboard(self, parent):
@@ -1151,9 +1215,10 @@ class EmployeeApp(tb.Window):
         tk.Label(sbox, text="🔎", bg="#f1f5f9").pack(side=tk.LEFT, padx=(8, 2))
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *_: self.refresh_tree())
-        tk.Entry(sbox, textvariable=self.search_var, bd=0, bg="#f1f5f9",
-                 font=(FONT, 10), fg=COL["text"]).pack(
-                     side=tk.LEFT, fill=tk.X, expand=True, ipady=6, padx=(0, 8))
+        self.search_entry = tk.Entry(sbox, textvariable=self.search_var, bd=0,
+                                     bg="#f1f5f9", font=(FONT, 10), fg=COL["text"])
+        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=6,
+                               padx=(0, 8))
 
         filt = tk.Frame(card, bg=COL["surface"])
         filt.pack(fill=tk.X, padx=12, pady=(0, 8))
@@ -1332,7 +1397,7 @@ class EmployeeApp(tb.Window):
                 w.grid(row=r * 2 + 1, column=col, columnspan=2, sticky=tk.EW,
                        padx=(4, 8), pady=(0, 6))
 
-        for key in CALC_KEYS:
+        for key in FIELD_BY_KEY:
             self.vars.setdefault(key, tk.StringVar())
 
         for key in ("salaire_base", "primes", "retenues", "jours_absence",
@@ -1423,8 +1488,8 @@ class EmployeeApp(tb.Window):
                    command=self.new_record).pack(side=tk.LEFT)
         tb.Button(bar, text="💾  Enregistrer", bootstyle="success",
                    command=self.save_record).pack(side=tk.LEFT, padx=8)
-        tb.Button(bar, text="🗑  Supprimer", bootstyle="danger",
-                   command=self.delete_record).pack(side=tk.LEFT)
+        tb.Button(bar, text="🗄  Archiver", bootstyle="warning",
+                   command=self.archive_record).pack(side=tk.LEFT)
         tb.Button(bar, text="🖨  Bulletin de paie", bootstyle="secondary-outline",
                    command=self.export_fiche).pack(side=tk.RIGHT)
         tb.Button(bar, text="📎  Documents", bootstyle="secondary-outline",
@@ -1457,6 +1522,7 @@ class EmployeeApp(tb.Window):
         self.pointage = PointageStore(Path(path))
         self.history = HistoryStore(Path(path))
         self.advances = AdvancesStore(Path(path))
+        self.audit = AuditStore(Path(path))
         self.reload()
 
     def reload(self):
@@ -1492,8 +1558,11 @@ class EmployeeApp(tb.Window):
         self.tree.delete(*self.tree.get_children())
         shown = 0
         for idx, rec in enumerate(self.records):
+            if str(rec.get("archive", "")).strip():
+                continue
             haystack = " ".join(str(rec.get(k, "")) for k in
-                                ("nom", "cin", "poste", "telephone")).lower()
+                                ("id", "nom", "cin", "poste", "telephone",
+                                 "email")).lower()
             if query and query not in haystack:
                 continue
             if f_poste != "Tous postes" and \
@@ -1618,6 +1687,7 @@ class EmployeeApp(tb.Window):
         rec["anciennete"] = compute_anciennete(rec.get("date_embauche"))
         rec["salaire_net"] = f"{p['net']:.2f}"
 
+        action = "Ajout" if self.current_index is None else "Modification"
         if self.current_index is None:
             self.records.append(rec)
         else:
@@ -1633,9 +1703,31 @@ class EmployeeApp(tb.Window):
             messagebox.showerror("خطأ فالحفظ", str(exc))
             return
 
+        self.audit.log(getattr(self, "role", "admin"), action,
+                       f"{rec.get('nom')} (ID {rec.get('id')})")
         self.reload()
         self._select_by_id(rec["id"])
-        self.set_status(f"تسجل ✓ : {rec.get('nom')}")
+        self.toast(f"Employé enregistré : {rec.get('nom')}")
+
+    def archive_record(self):
+        if self.current_index is None:
+            messagebox.showinfo("مكاين والو", "اختار شي خدام باش تأرشفو.")
+            return
+        rec = self.records[self.current_index]
+        if not messagebox.askyesno(
+                "Archiver", f"Archiver {rec.get('nom')} ?\n"
+                "(récupérable depuis « Employés archivés »)"):
+            return
+        rec["archive"] = "1"
+        try:
+            self.store.save_all(self.records)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("خطأ فالحفظ", str(exc))
+            return
+        self.audit.log(getattr(self, "role", "admin"), "Archivage",
+                       f"{rec.get('nom')} (ID {rec.get('id')})")
+        self.reload()
+        self.toast(f"Employé archivé : {rec.get('nom')}", "warning")
 
     def _select_by_id(self, emp_id):
         for idx, rec in enumerate(self.records):
@@ -1657,14 +1749,103 @@ class EmployeeApp(tb.Window):
         if not messagebox.askyesno("تأكيد المسح",
                                    f"واش بصح بغيتي تمسح: {rec.get('nom')} ؟"):
             return
+        info = f"{rec.get('nom')} (ID {rec.get('id')})"
         del self.records[self.current_index]
         try:
             self.store.save_all(self.records)
         except Exception as exc:
             messagebox.showerror("خطأ فالحفظ", str(exc))
             return
+        self.audit.log(getattr(self, "role", "admin"), "Suppression", info)
         self.reload()
-        self.set_status("تمسح الخدام ✓")
+        self.toast("Employé supprimé", "danger")
+
+    def open_archived(self):
+        archived = [(i, r) for i, r in enumerate(self.records)
+                    if str(r.get("archive", "")).strip()]
+        win = tk.Toplevel(self)
+        win.title("Employés archivés")
+        win.configure(bg=COL["surface"])
+        win.geometry("560x440")
+        tk.Label(win, text="🗄  Employés archivés", bg=COL["surface"],
+                 fg=COL["brand"], font=(FONT, 14, "bold")).pack(
+                     anchor=tk.W, padx=16, pady=(14, 6))
+        tree = ttk.Treeview(win, columns=("id", "nom", "poste"),
+                            show="headings")
+        for c, lab, w in (("id", "ID", 60), ("nom", "Nom", 220),
+                          ("poste", "Poste", 160)):
+            tree.heading(c, text=lab)
+            tree.column(c, width=w)
+        tree.pack(fill=tk.BOTH, expand=True, padx=16, pady=8)
+        idx_map = {}
+        for i, r in archived:
+            idx_map[str(i)] = i
+            tree.insert("", tk.END, iid=str(i), values=(
+                r.get("id", ""), r.get("nom", ""), r.get("poste", "")))
+
+        def restore():
+            sel = tree.selection()
+            if not sel:
+                return
+            rec = self.records[idx_map[sel[0]]]
+            rec["archive"] = ""
+            self.store.save_all(self.records)
+            self.audit.log(getattr(self, "role", "admin"), "Restauration",
+                           f"{rec.get('nom')} (ID {rec.get('id')})")
+            tree.delete(sel[0])
+            self.reload()
+            self.toast(f"Restauré : {rec.get('nom')}", "success")
+
+        def purge():
+            if not self._require_admin():
+                return
+            sel = tree.selection()
+            if not sel:
+                return
+            rec = self.records[idx_map[sel[0]]]
+            if not messagebox.askyesno(
+                    "Suppression définitive",
+                    f"Supprimer définitivement {rec.get('nom')} ?", parent=win):
+                return
+            info = f"{rec.get('nom')} (ID {rec.get('id')})"
+            self.records.pop(idx_map[sel[0]])
+            self.store.save_all(self.records)
+            self.audit.log(getattr(self, "role", "admin"),
+                           "Suppression définitive", info)
+            win.destroy()
+            self.reload()
+            self.toast("Supprimé définitivement", "danger")
+
+        bb = tk.Frame(win, bg=COL["surface"])
+        bb.pack(fill=tk.X, padx=16, pady=(0, 14))
+        tb.Button(bb, text="↩  Restaurer", bootstyle="success",
+                  command=restore).pack(side=tk.LEFT)
+        tb.Button(bb, text="🗑  Supprimer définitivement", bootstyle="danger",
+                  command=purge).pack(side=tk.LEFT, padx=6)
+
+    def open_audit(self):
+        entries = self.audit.entries()
+        win = tk.Toplevel(self)
+        win.title("Journal des modifications")
+        win.configure(bg=COL["surface"])
+        win.geometry("680x460")
+        tk.Label(win, text="📝  Journal des modifications (Audit)",
+                 bg=COL["surface"], fg=COL["brand"], font=(FONT, 14, "bold")).pack(
+                     anchor=tk.W, padx=16, pady=(14, 6))
+        tree = ttk.Treeview(win, columns=("time", "user", "action", "detail"),
+                            show="headings")
+        for c, lab, w in (("time", "Date/heure", 150), ("user", "Utilisateur", 90),
+                          ("action", "Action", 130), ("detail", "Détail", 260)):
+            tree.heading(c, text=lab)
+            tree.column(c, width=w, anchor=tk.W)
+        tree.pack(fill=tk.BOTH, expand=True, padx=16, pady=8)
+        for e in reversed(entries):
+            tree.insert("", tk.END, values=(
+                e.get("time", "").replace("T", " "), e.get("user", ""),
+                e.get("action", ""), e.get("detail", "")))
+        tk.Label(win, text=f"{len(entries)} opération(s) — journal en lecture seule",
+                 bg=COL["surface"], fg=COL["muted"], font=(FONT, 9)).pack(
+                     anchor=tk.W, padx=16, pady=(0, 12))
 
 
     def export_fiche(self):
@@ -3250,6 +3431,60 @@ class EmployeeApp(tb.Window):
 
     def set_status(self, text: str):
         self.status_var.set(text)
+
+    def toast(self, message: str, kind: str = "success"):
+        self.set_status(message)
+        if HAS_TB_EXTRAS:
+            try:
+                ToastNotification(title="Gestion des Employés", message=message,
+                                  duration=2600, bootstyle=kind,
+                                  position=(20, 60, "se")).show_toast()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _focus_search(self):
+        if hasattr(self, "search_entry"):
+            self.search_entry.focus_set()
+
+    def _bind_shortcuts(self):
+        self.bind("<Control-n>", lambda e: self.new_record())
+        self.bind("<Control-s>", lambda e: self.save_record())
+        self.bind("<Control-f>", lambda e: self._focus_search())
+        self.bind("<Control-p>", lambda e: self.export_pdf())
+
+    def _show_splash(self):
+        try:
+            sp = tk.Toplevel(self)
+            sp.overrideredirect(True)
+            w, h = 420, 240
+            x = (self.winfo_screenwidth() - w) // 2
+            y = (self.winfo_screenheight() - h) // 2
+            sp.geometry(f"{w}x{h}+{x}+{y}")
+            frame = tk.Frame(sp, bg=COL["brand"])
+            frame.pack(fill=tk.BOTH, expand=True)
+            tk.Label(frame, text="👥", bg=COL["brand"], fg="white",
+                     font=(FONT, 44)).pack(pady=(34, 4))
+            tk.Label(frame, text="Gestion des Employés & Paie", bg=COL["brand"],
+                     fg="white", font=(FONT, 15, "bold")).pack()
+            tk.Label(frame, text=f"Version {APP_VERSION}", bg=COL["brand"],
+                     fg="#a7d7bd", font=(FONT, 9)).pack(pady=(2, 14))
+            pb = ttk.Progressbar(frame, mode="indeterminate", length=240)
+            pb.pack()
+            pb.start(12)
+            self._splash = sp
+            sp.update()
+        except Exception:  # noqa: BLE001
+            self._splash = None
+
+    def _close_splash(self):
+        sp = getattr(self, "_splash", None)
+        if sp is not None:
+            try:
+                sp.destroy()
+            except Exception:  # noqa: BLE001
+                pass
+            self._splash = None
+        self.deiconify()
 
 
 def main():
