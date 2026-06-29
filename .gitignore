@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Build artifacts (PyInstaller / Inno Setup)
+build/
+dist/
+installer/
+*.spec
+
+# Données et fichiers générés par l'application (ne pas publier)
+employes.xlsx
+*.xlsx
+pointage.json
+advances.json
+history.json
+documents_registry.json
+.employee_manager.json
+fiches/
+backups/
+documents/
+
+# OS
+Thumbs.db
+desktop.ini
