@@ -5,6 +5,7 @@ import csv
 import datetime as dt
 import hashlib
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -42,7 +43,13 @@ LOGO_PATH = ""
 SIGN_PATH = ""
 DEFAULT_FILE = Path.home() / "employes.xlsx"
 CONFIG_PATH = Path.home() / ".employee_manager.json"
+LOG_PATH = Path.home() / ".employee_manager.log"
 SHEET_NAME = "Employes"
+
+logging.basicConfig(
+    filename=str(LOG_PATH), level=logging.WARNING,
+    format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("employee_manager")
 JOURS_OUVRABLES = 26
 LEAVE_PER_MONTH = 1.5
 
@@ -94,17 +101,37 @@ def save_config(cfg: dict) -> None:
     try:
         CONFIG_PATH.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     except OSError:
-        pass
+        log.exception("Echec de l'ecriture de la configuration")
 
 
 def hash_pw(password: str, salt: str) -> str:
-    return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+    return hashlib.scrypt(
+        password.encode("utf-8"), salt=bytes.fromhex(salt),
+        n=16384, r=8, p=1, dklen=32, maxmem=67108864).hex()
+
+
+def make_password(password: str) -> dict:
+    salt = secrets.token_hex(16)
+    return {"pw_algo": "scrypt", "pw_salt": salt, "pw_hash": hash_pw(password, salt)}
+
+
+def verify_hash(password: str, salt: str, stored: str, algo: str = "scrypt") -> bool:
+    try:
+        if algo == "scrypt":
+            return secrets.compare_digest(hash_pw(password, salt), stored)
+        legacy = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+        return secrets.compare_digest(legacy, stored)
+    except (ValueError, TypeError):
+        log.exception("Echec de verification du mot de passe")
+        return False
 
 
 def verify_pw(password: str, cfg: dict) -> bool:
-    if not cfg.get("pw_hash"):
+    stored = cfg.get("pw_hash")
+    if not stored:
         return True
-    return hash_pw(password, cfg.get("pw_salt", "")) == cfg["pw_hash"]
+    return verify_hash(password, cfg.get("pw_salt", ""), stored,
+                       cfg.get("pw_algo", "sha256"))
 
 
 SETTING_DEFAULTS = {
@@ -115,29 +142,48 @@ SETTING_DEFAULTS = {
 }
 
 
+def _num(cfg, key, default, lo, hi, cast=float):
+    """قراءة قيمة رقمية من الإعدادات مع التحقق من المجال (وإلا القيمة الافتراضية)."""
+    try:
+        val = cast(cfg.get(key, default))
+    except (TypeError, ValueError):
+        log.warning("Parametre invalide %r=%r, valeur par defaut utilisee",
+                    key, cfg.get(key))
+        return default
+    if not (lo <= val <= hi):
+        log.warning("Parametre %r hors limites (%r), valeur par defaut utilisee",
+                    key, val)
+        return default
+    return val
+
+
 def apply_config_settings(cfg: dict) -> None:
     global COMPANY_NAME, LOGO_PATH, SIGN_PATH, JOURS_OUVRABLES, LEAVE_PER_MONTH
     global PLAFOND_CNSS, TAUX_CNSS, TAUX_AMO, SEUIL_FP
     global PLAFOND_FP_MENSUEL, DEDUCTION_CHARGE, IR_BRACKETS
-    COMPANY_NAME = cfg.get("company_name", COMPANY_NAME) or "Ma Société"
-    LOGO_PATH = cfg.get("logo_path", "") or ""
-    SIGN_PATH = cfg.get("signature_path", "") or ""
-    JOURS_OUVRABLES = int(cfg.get("jours_ouvrables", JOURS_OUVRABLES) or 26)
-    LEAVE_PER_MONTH = float(cfg.get("leave_per_month", LEAVE_PER_MONTH))
-    PLAFOND_CNSS = float(cfg.get("plafond_cnss", PLAFOND_CNSS))
-    TAUX_CNSS = float(cfg.get("taux_cnss", TAUX_CNSS))
-    TAUX_AMO = float(cfg.get("taux_amo", TAUX_AMO))
-    SEUIL_FP = float(cfg.get("seuil_fp", SEUIL_FP))
-    PLAFOND_FP_MENSUEL = float(cfg.get("plafond_fp", PLAFOND_FP_MENSUEL))
-    DEDUCTION_CHARGE = float(cfg.get("deduction_charge", DEDUCTION_CHARGE))
+    COMPANY_NAME = str(cfg.get("company_name") or "Ma Société")[:120]
+    LOGO_PATH = str(cfg.get("logo_path", "") or "")
+    SIGN_PATH = str(cfg.get("signature_path", "") or "")
+    JOURS_OUVRABLES = _num(cfg, "jours_ouvrables", 26, 1, 31, int)
+    LEAVE_PER_MONTH = _num(cfg, "leave_per_month", 1.5, 0, 31)
+    PLAFOND_CNSS = _num(cfg, "plafond_cnss", 6000.0, 0, 1_000_000)
+    TAUX_CNSS = _num(cfg, "taux_cnss", 0.0448, 0, 1)
+    TAUX_AMO = _num(cfg, "taux_amo", 0.0226, 0, 1)
+    SEUIL_FP = _num(cfg, "seuil_fp", 6500.0, 0, 1_000_000)
+    PLAFOND_FP_MENSUEL = _num(cfg, "plafond_fp", 2916.67, 0, 1_000_000)
+    DEDUCTION_CHARGE = _num(cfg, "deduction_charge", 30.0, 0, 100_000)
     br = cfg.get("ir_brackets")
     if br:
         try:
-            IR_BRACKETS = [
+            brackets = [
                 (float("inf") if c in (None, "") else float(c), float(r))
                 for c, r in br]
+            if brackets and all(0 <= r <= 1 for _, r in brackets):
+                IR_BRACKETS = brackets
+            else:
+                log.warning("Bareme IR invalide, valeurs par defaut conservees")
         except (TypeError, ValueError):
-            pass
+            log.warning("Bareme IR illisible, valeurs par defaut conservees")
 
 
 FIELDS = [
@@ -340,13 +386,14 @@ class ExcelStore:
         try:
             shutil.copy2(self.path, dest)
         except OSError:
+            log.exception("Echec de la sauvegarde de %s", self.path)
             return
         backups = sorted(bdir.glob(f"{self.path.stem}_*{self.path.suffix}"))
         for old in backups[:-keep]:
             try:
                 old.unlink()
             except OSError:
-                pass
+                log.warning("Impossible de supprimer l'ancienne sauvegarde %s", old)
 
     def save_all(self, records: list[dict]):
         self._backup()
@@ -394,7 +441,7 @@ class PointageStore:
             self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
                                  encoding="utf-8")
         except OSError:
-            pass
+            log.exception("Echec de l'ecriture du pointage")
 
 
 def default_pointage(year: int, month: int) -> list:
@@ -432,7 +479,7 @@ class HistoryStore:
             self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
                                  encoding="utf-8")
         except OSError:
-            pass
+            log.exception("Echec de l'ecriture de l'historique")
 
     def series(self) -> list:
         return sorted(self.load().items())
@@ -453,7 +500,7 @@ class AdvancesStore:
             self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
                                  encoding="utf-8")
         except OSError:
-            pass
+            log.exception("Echec de l'ecriture des avances")
 
     def list(self, emp_id) -> list:
         return self._load().get(str(emp_id), [])
@@ -555,7 +602,8 @@ class EmployeeApp(tk.Tk):
                 self.role = "admin"
                 self.deiconify()
                 return True
-            if comp_hash and hash_pw(pw, cfg.get("pw_salt_c", "")) == comp_hash:
+            if comp_hash and verify_hash(pw, cfg.get("pw_salt_c", ""), comp_hash,
+                                         cfg.get("pw_algo_c", "sha256")):
                 self.role = "comptable"
                 self.deiconify()
                 return True
@@ -635,15 +683,14 @@ class EmployeeApp(tk.Tk):
         if new is None:
             return
         if new == "":
-            for k in ("pw_hash", "pw_salt", "pw_hash_c", "pw_salt_c"):
+            for k in ("pw_hash", "pw_salt", "pw_algo",
+                      "pw_hash_c", "pw_salt_c", "pw_algo_c"):
                 cfg.pop(k, None)
             save_config(cfg)
             messagebox.showinfo("تم", "تشالات الحماية بكلمة السر.")
             self.set_status("Mot de passe désactivé.")
             return
-        salt = secrets.token_hex(8)
-        cfg["pw_salt"] = salt
-        cfg["pw_hash"] = hash_pw(new, salt)
+        cfg.update(make_password(new))
         save_config(cfg)
         messagebox.showinfo("تم", "تسجلات كلمة سر المدير ✓")
         self.set_status("Mot de passe admin activé 🔐")
@@ -663,14 +710,15 @@ class EmployeeApp(tk.Tk):
         if new is None:
             return
         if new == "":
-            cfg.pop("pw_hash_c", None)
-            cfg.pop("pw_salt_c", None)
+            for k in ("pw_hash_c", "pw_salt_c", "pw_algo_c"):
+                cfg.pop(k, None)
             save_config(cfg)
             messagebox.showinfo("تم", "تمسح حساب المحاسب.")
             return
-        salt = secrets.token_hex(8)
-        cfg["pw_salt_c"] = salt
-        cfg["pw_hash_c"] = hash_pw(new, salt)
+        p = make_password(new)
+        cfg["pw_salt_c"] = p["pw_salt"]
+        cfg["pw_hash_c"] = p["pw_hash"]
+        cfg["pw_algo_c"] = p["pw_algo"]
         save_config(cfg)
         messagebox.showinfo(
             "تم", "تسجل حساب المحاسب ✓\nكيقدر يشوف ويصدّر، ولكن ماكيقدرش يمسح "
@@ -1561,6 +1609,34 @@ class EmployeeApp(tk.Tk):
         if not rec.get("nom"):
             messagebox.showwarning("ناقص", "خاصك تكتب على الأقل الاسم الكامل.")
             return
+
+        errors = []
+        num_fields = [("salaire_base", "Salaire de base"), ("primes", "Primes"),
+                      ("retenues", "Autres retenues"),
+                      ("retenue_avance", "Retenue avance"),
+                      ("jours_absence", "Jours d'absence"),
+                      ("personnes_charge", "Personnes à charge")]
+        for key, label in num_fields:
+            raw = (rec.get(key) or "").strip()
+            if not raw:
+                continue
+            try:
+                val = float(raw.replace(",", ".").replace(" ", ""))
+            except ValueError:
+                errors.append(f"« {label} » doit être un nombre.")
+                continue
+            if val < 0:
+                errors.append(f"« {label} » ne peut pas être négatif.")
+        for key, label in (("date_naissance", "Date de naissance"),
+                           ("date_embauche", "Date d'embauche"),
+                           ("date_fin_contrat", "Fin de contrat")):
+            raw = (rec.get(key) or "").strip()
+            if raw and parse_date(raw) is None:
+                errors.append(f"« {label} » : date invalide (AAAA-MM-JJ).")
+        if errors:
+            messagebox.showwarning("Données invalides", "\n".join(errors))
+            return
+
         if not rec.get("id"):
             rec["id"] = str(self.next_id())
         p = compute_payroll(rec)
@@ -2840,7 +2916,7 @@ class EmployeeApp(tk.Tk):
             p.write_text(json.dumps(data, ensure_ascii=False, indent=2),
                          encoding="utf-8")
         except OSError:
-            pass
+            log.exception("Echec de l'ecriture du registre des documents")
 
     def open_registry(self):
         try:
