@@ -3,6 +3,14 @@
 Application de bureau (Windows) pour la gestion du personnel et de la paie,
 adaptée au contexte marocain (CNSS / AMO / IR), reliée à un fichier Excel.
 
+## ⬇️ Télécharger (Windows)
+
+### ➜ **[Télécharger GestionEmployes_Setup.exe](https://github.com/madogo-foujine/gestion-employes/releases/latest/download/GestionEmployes_Setup.exe)**
+
+Double-cliquez sur le fichier téléchargé pour installer l'application.
+**Aucun Python ni dépendance requis.** (Voir aussi la page
+[Releases](https://github.com/madogo-foujine/gestion-employes/releases).)
+
 ## Fonctionnalités
 
 - **Fiches employés** : informations personnelles, contact, administratif, salaire.
