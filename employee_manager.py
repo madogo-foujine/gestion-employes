@@ -14,6 +14,10 @@ from pathlib import Path
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+import ttkbootstrap as tb
+
+THEME_LIGHT = "flatly"
+THEME_DARK = "darkly"
 
 try:
     from openpyxl import Workbook, load_workbook
@@ -524,16 +528,18 @@ class AdvancesStore:
         return round(sum(a.get("solde", 0) for a in self.list(emp_id)), 2)
 
 
-class EmployeeApp(tk.Tk):
+class EmployeeApp(tb.Window):
     def __init__(self):
-        super().__init__()
+        cfg = load_config()
+        theme = cfg.get("theme", "light")
+        super().__init__(themename=THEME_DARK if theme == "dark" else THEME_LIGHT)
         self.title(APP_TITLE)
         self.geometry("1200x800")
         self.minsize(1000, 640)
 
-        self.config_data = load_config()
+        self.config_data = cfg
         apply_config_settings(self.config_data)
-        self.theme = self.config_data.get("theme", "light")
+        self.theme = theme
         COL.clear()
         COL.update(PALETTES.get(self.theme, PALETTES["light"]))
         self.configure(bg=COL["bg"])
@@ -571,6 +577,7 @@ class EmployeeApp(tk.Tk):
         self.theme = "dark" if self.theme == "light" else "light"
         COL.clear()
         COL.update(PALETTES[self.theme])
+        self.style.theme_use(THEME_DARK if self.theme == "dark" else THEME_LIGHT)
         self.configure(bg=COL["bg"])
         cur_id = None
         if self.current_index is not None and \
@@ -651,9 +658,9 @@ class EmployeeApp(tk.Tk):
 
         btns = tk.Frame(dlg, bg=COL["surface"])
         btns.pack(pady=(10, 18))
-        ttk.Button(btns, text="OK", style="Primary.TButton",
+        tb.Button(btns, text="OK", bootstyle="success",
                    command=ok).pack(side=tk.LEFT, padx=6)
-        ttk.Button(btns, text="Annuler", style="Ghost.TButton",
+        tb.Button(btns, text="Annuler", bootstyle="secondary-outline",
                    command=cancel).pack(side=tk.LEFT, padx=6)
         dlg.bind("<Return>", ok)
         dlg.bind("<Escape>", cancel)
@@ -726,45 +733,9 @@ class EmployeeApp(tk.Tk):
 
 
     def _build_style(self):
-        style = ttk.Style(self)
-        try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
-
-        style.configure("TEntry", padding=6, relief="flat",
-                        fieldbackground=COL["surface"], bordercolor=COL["border"])
-        style.configure("TCombobox", padding=5)
-        style.map("TCombobox",
-                  fieldbackground=[("readonly", COL["surface"])],
-                  selectbackground=[("readonly", COL["surface"])],
-                  selectforeground=[("readonly", COL["text"])])
-
-        style.configure("Treeview", background=COL["surface"],
-                        fieldbackground=COL["surface"], foreground=COL["text"],
-                        rowheight=30, borderwidth=0, font=(FONT, 10))
-        style.configure("Treeview.Heading", background=COL["brand2"],
-                        foreground="white", font=(FONT, 10, "bold"),
-                        relief="flat", padding=6)
-        style.map("Treeview.Heading", background=[("active", COL["brand"])])
-        style.map("Treeview", background=[("selected", COL["sel"])],
-                  foreground=[("selected", "white")])
-
-        style.configure("Vertical.TScrollbar", background=COL["border"],
-                        troughcolor=COL["bg"], borderwidth=0, arrowsize=12)
-
-        def button(name, bg, fg, active):
-            style.configure(name, background=bg, foreground=fg,
-                            font=(FONT, 10, "bold"), borderwidth=0,
-                            focusthickness=0, padding=(14, 9))
-            style.map(name, background=[("active", active), ("pressed", active)])
-
-        button("Primary.TButton", COL["accent"], "white", COL["brand2"])
-        button("Danger.TButton",  COL["danger"], "white", "#b91c1c")
-        button("Info.TButton",    COL["info"],   "white", "#1d4ed8")
-        button("Ghost.TButton",   COL["surface"], COL["text"], COL["bg"])
-        button("Tool.TButton",    COL["surface"], COL["text"], COL["bg"])
-        button("Warn.TButton",    "#f59e0b", "white", "#d97706")
+        # ttkbootstrap gère le thème ; on ajuste juste la hauteur des lignes.
+        self.style.configure("Treeview", rowheight=30, font=(FONT, 10))
+        self.style.configure("Treeview.Heading", font=(FONT, 10, "bold"))
 
 
     def _build_header(self):
@@ -946,9 +917,9 @@ class EmployeeApp(tk.Tk):
             if p:
                 logo_var.set(p)
 
-        ttk.Button(logo_box, text="📷", style="Ghost.TButton",
+        tb.Button(logo_box, text="📷", bootstyle="secondary-outline",
                    command=pick_logo).pack(side=tk.LEFT, padx=4)
-        ttk.Button(logo_box, text="✖", style="Ghost.TButton",
+        tb.Button(logo_box, text="✖", bootstyle="secondary-outline",
                    command=lambda: logo_var.set("")).pack(side=tk.LEFT)
 
         sign_row = logo_row + 1
@@ -969,9 +940,9 @@ class EmployeeApp(tk.Tk):
             if p:
                 sign_var.set(p)
 
-        ttk.Button(sign_box, text="✍️", style="Ghost.TButton",
+        tb.Button(sign_box, text="✍️", bootstyle="secondary-outline",
                    command=pick_sign).pack(side=tk.LEFT, padx=4)
-        ttk.Button(sign_box, text="✖", style="Ghost.TButton",
+        tb.Button(sign_box, text="✖", bootstyle="secondary-outline",
                    command=lambda: sign_var.set("")).pack(side=tk.LEFT)
 
         def save():
@@ -1005,16 +976,16 @@ class EmployeeApp(tk.Tk):
             self.set_status("الإعدادات تسجلات ✓")
             messagebox.showinfo("تم", "الإعدادات تطبقات على البرنامج كامل ✓")
 
-        ttk.Button(dlg, text="🧮  Éditer le barème IR…", style="Ghost.TButton",
+        tb.Button(dlg, text="🧮  Éditer le barème IR…", bootstyle="secondary-outline",
                    command=lambda: self.open_ir_editor(dlg)).grid(
                        row=logo_row + 2, column=0, columnspan=2,
                        sticky=tk.W, padx=16, pady=(8, 0))
 
         btns = tk.Frame(dlg, bg=COL["surface"])
         btns.grid(row=logo_row + 3, column=0, columnspan=2, pady=(12, 16))
-        ttk.Button(btns, text="💾  Enregistrer", style="Primary.TButton",
+        tb.Button(btns, text="💾  Enregistrer", bootstyle="success",
                    command=save).pack(side=tk.LEFT, padx=6)
-        ttk.Button(btns, text="Annuler", style="Ghost.TButton",
+        tb.Button(btns, text="Annuler", bootstyle="secondary-outline",
                    command=dlg.destroy).pack(side=tk.LEFT, padx=6)
         dlg.columnconfigure(1, weight=1)
         dlg.update_idletasks()
@@ -1069,9 +1040,9 @@ class EmployeeApp(tk.Tk):
 
         bb = tk.Frame(dlg, bg=COL["surface"])
         bb.pack(pady=(0, 14))
-        ttk.Button(bb, text="💾  Enregistrer", style="Primary.TButton",
+        tb.Button(bb, text="💾  Enregistrer", bootstyle="success",
                    command=save_ir).pack(side=tk.LEFT, padx=6)
-        ttk.Button(bb, text="Annuler", style="Ghost.TButton",
+        tb.Button(bb, text="Annuler", bootstyle="secondary-outline",
                    command=dlg.destroy).pack(side=tk.LEFT, padx=6)
         dlg.geometry(f"+{self.winfo_rootx() + 140}+{self.winfo_rooty() + 90}")
 
@@ -1087,17 +1058,17 @@ class EmployeeApp(tk.Tk):
                  ("📉  Évolution", self.open_evolution)]
         first = True
         for label, cmd in quick:
-            ttk.Button(bar, text=label, style="Tool.TButton", command=cmd).pack(
+            tb.Button(bar, text=label, bootstyle="light", command=cmd).pack(
                 side=tk.LEFT, padx=((12, 4) if first else 4), pady=8)
             first = False
 
         self.path_var = tk.StringVar()
         theme_icon = "☀️" if self.theme == "dark" else "🌙"
-        ttk.Button(bar, text=theme_icon, style="Tool.TButton",
+        tb.Button(bar, text=theme_icon, bootstyle="light",
                    command=self.toggle_theme).pack(side=tk.RIGHT, padx=4, pady=8)
-        ttk.Button(bar, text="🔐", style="Tool.TButton",
+        tb.Button(bar, text="🔐", bootstyle="light",
                    command=self.manage_password).pack(side=tk.RIGHT, padx=4, pady=8)
-        self.alert_btn = ttk.Button(bar, text="🔔  Alertes", style="Warn.TButton",
+        self.alert_btn = tb.Button(bar, text="🔔  Alertes", bootstyle="warning",
                                     command=self.open_alerts)
         self.alert_btn.pack(side=tk.RIGHT, padx=4, pady=8)
 
@@ -1448,17 +1419,17 @@ class EmployeeApp(tk.Tk):
     def _build_actions(self, parent):
         bar = tk.Frame(parent, bg=COL["bg"])
         bar.pack(fill=tk.X, pady=(10, 0))
-        ttk.Button(bar, text="🆕  Nouveau", style="Info.TButton",
+        tb.Button(bar, text="🆕  Nouveau", bootstyle="info",
                    command=self.new_record).pack(side=tk.LEFT)
-        ttk.Button(bar, text="💾  Enregistrer", style="Primary.TButton",
+        tb.Button(bar, text="💾  Enregistrer", bootstyle="success",
                    command=self.save_record).pack(side=tk.LEFT, padx=8)
-        ttk.Button(bar, text="🗑  Supprimer", style="Danger.TButton",
+        tb.Button(bar, text="🗑  Supprimer", bootstyle="danger",
                    command=self.delete_record).pack(side=tk.LEFT)
-        ttk.Button(bar, text="🖨  Bulletin de paie", style="Ghost.TButton",
+        tb.Button(bar, text="🖨  Bulletin de paie", bootstyle="secondary-outline",
                    command=self.export_fiche).pack(side=tk.RIGHT)
-        ttk.Button(bar, text="📎  Documents", style="Ghost.TButton",
+        tb.Button(bar, text="📎  Documents", bootstyle="secondary-outline",
                    command=self.open_documents).pack(side=tk.RIGHT, padx=8)
-        ttk.Button(bar, text="💳  Avances", style="Ghost.TButton",
+        tb.Button(bar, text="💳  Avances", bootstyle="secondary-outline",
                    command=self.open_advances).pack(side=tk.RIGHT)
 
     def _build_statusbar(self):
@@ -2243,10 +2214,10 @@ class EmployeeApp(tk.Tk):
         nav.pack(padx=16, pady=2)
         year_lbl = tk.Label(nav, bg=COL["surface"], fg=COL["text"],
                             font=(FONT, 12, "bold"), width=8)
-        ttk.Button(nav, text="◀", style="Ghost.TButton",
+        tb.Button(nav, text="◀", bootstyle="secondary-outline",
                    command=lambda: shift(-1)).pack(side=tk.LEFT)
         year_lbl.pack(side=tk.LEFT, padx=8)
-        ttk.Button(nav, text="▶", style="Ghost.TButton",
+        tb.Button(nav, text="▶", bootstyle="secondary-outline",
                    command=lambda: shift(1)).pack(side=tk.LEFT)
 
         cols = ("mois", "P", "A", "C", "R")
@@ -2280,7 +2251,7 @@ class EmployeeApp(tk.Tk):
             st["y"] += d
             render()
 
-        ttk.Button(win, text="Fermer", style="Ghost.TButton",
+        tb.Button(win, text="Fermer", bootstyle="secondary-outline",
                    command=win.destroy).pack(pady=(0, 14))
         render()
 
@@ -2311,10 +2282,10 @@ class EmployeeApp(tk.Tk):
         nav.pack(fill=tk.X, padx=16)
         month_lbl = tk.Label(nav, text="", bg=COL["surface"], fg=COL["text"],
                              font=(FONT, 12, "bold"), width=18)
-        ttk.Button(nav, text="◀", style="Ghost.TButton",
+        tb.Button(nav, text="◀", bootstyle="secondary-outline",
                    command=lambda: shift(-1)).pack(side=tk.LEFT)
         month_lbl.pack(side=tk.LEFT, padx=8)
-        ttk.Button(nav, text="▶", style="Ghost.TButton",
+        tb.Button(nav, text="▶", bootstyle="secondary-outline",
                    command=lambda: shift(1)).pack(side=tk.LEFT)
 
         legend = tk.Frame(win, bg=COL["surface"])
@@ -2402,9 +2373,9 @@ class EmployeeApp(tk.Tk):
 
         btns = tk.Frame(win, bg=COL["surface"])
         btns.pack(pady=(4, 14))
-        ttk.Button(btns, text="💾  Enregistrer + appliquer", style="Primary.TButton",
+        tb.Button(btns, text="💾  Enregistrer + appliquer", bootstyle="success",
                    command=save).pack(side=tk.LEFT, padx=6)
-        ttk.Button(btns, text="Fermer", style="Ghost.TButton",
+        tb.Button(btns, text="Fermer", bootstyle="secondary-outline",
                    command=win.destroy).pack(side=tk.LEFT, padx=6)
 
         render()
@@ -2757,7 +2728,7 @@ class EmployeeApp(tk.Tk):
             v_montant.set("")
             refresh()
 
-        ttk.Button(form, text="➕  Ajouter une avance", style="Primary.TButton",
+        tb.Button(form, text="➕  Ajouter une avance", bootstyle="success",
                    command=add_av).grid(row=0, column=4, padx=8)
 
         def supprimer():
@@ -2795,11 +2766,11 @@ class EmployeeApp(tk.Tk):
 
         bb = tk.Frame(win, bg=COL["surface"])
         bb.pack(fill=tk.X, padx=16, pady=(0, 14))
-        ttk.Button(bb, text="💸  Prélever la mensualité (ce mois)",
-                   style="Primary.TButton", command=prelever).pack(side=tk.LEFT)
-        ttk.Button(bb, text="🗑  Supprimer", style="Danger.TButton",
+        tb.Button(bb, text="💸  Prélever la mensualité (ce mois)",
+                   bootstyle="success", command=prelever).pack(side=tk.LEFT)
+        tb.Button(bb, text="🗑  Supprimer", bootstyle="danger",
                    command=supprimer).pack(side=tk.LEFT, padx=6)
-        ttk.Button(bb, text="Fermer", style="Ghost.TButton",
+        tb.Button(bb, text="Fermer", bootstyle="secondary-outline",
                    command=win.destroy).pack(side=tk.RIGHT)
         refresh()
 
@@ -2878,13 +2849,13 @@ class EmployeeApp(tk.Tk):
         lb.bind("<Double-1>", open_sel)
         bb = tk.Frame(win, bg=COL["surface"])
         bb.pack(fill=tk.X, padx=16, pady=(0, 14))
-        ttk.Button(bb, text="➕  Ajouter", style="Primary.TButton",
+        tb.Button(bb, text="➕  Ajouter", bootstyle="success",
                    command=add_docs).pack(side=tk.LEFT)
-        ttk.Button(bb, text="👁  Ouvrir", style="Ghost.TButton",
+        tb.Button(bb, text="👁  Ouvrir", bootstyle="secondary-outline",
                    command=open_sel).pack(side=tk.LEFT, padx=6)
-        ttk.Button(bb, text="🗑  Supprimer", style="Danger.TButton",
+        tb.Button(bb, text="🗑  Supprimer", bootstyle="danger",
                    command=del_sel).pack(side=tk.LEFT)
-        ttk.Button(bb, text="📁  Dossier", style="Ghost.TButton",
+        tb.Button(bb, text="📁  Dossier", bootstyle="secondary-outline",
                    command=lambda: os.startfile(doc_dir)).pack(side=tk.RIGHT)
         refresh()
 
@@ -2964,7 +2935,7 @@ class EmployeeApp(tk.Tk):
         bb.pack(fill=tk.X, padx=16, pady=(0, 14))
         tk.Label(bb, text=f"{len(data)} document(s)", bg=COL["surface"],
                  fg=COL["muted"], font=(FONT, 9)).pack(side=tk.LEFT)
-        ttk.Button(bb, text="👁  Ouvrir", style="Primary.TButton",
+        tb.Button(bb, text="👁  Ouvrir", bootstyle="success",
                    command=open_file).pack(side=tk.RIGHT)
 
 
