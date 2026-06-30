@@ -211,6 +211,7 @@ FIELDS = [
     ("archive",         "Archivé",            "meta",   "hidden"),
     ("nom",             "Nom complet",        "base",   "text"),
     ("cin",             "CIN",                "base",   "text"),
+    ("genre",           "Genre",              "base",   "combo"),
     ("poste",           "Poste",              "base",   "text"),
     ("salaire_base",    "Salaire de base",    "base",   "number"),
 
@@ -251,6 +252,8 @@ GROUPS = {
 }
 
 CONTRAT_OPTIONS = ["CDI", "CDD", "ANAPEC", "Stage", "Intérim", "Autre"]
+GENRE_OPTIONS = ["Homme", "Femme"]
+COMBO_VALUES = {"type_contrat": CONTRAT_OPTIONS, "genre": GENRE_OPTIONS}
 
 
 def to_float(value) -> float:
@@ -963,6 +966,7 @@ class EmployeeApp(tb.Window):
                            command=self.open_graph)
         m_view.add_command(label="📉  Évolution mensuelle",
                            command=self.open_evolution)
+        m_view.add_command(label="📊  Statistiques", command=self.open_stats)
         m_view.add_command(label="📆  Calendrier", command=self.open_calendar)
         m_view.add_command(label="🧮  Simulateur de salaire",
                            command=self.open_simulateur)
@@ -1497,7 +1501,8 @@ class EmployeeApp(tb.Window):
                 self.vars[key] = var
                 if kind == "combo":
                     w = ttk.Combobox(body, textvariable=var,
-                                     values=CONTRAT_OPTIONS, state="readonly")
+                                     values=COMBO_VALUES.get(key, CONTRAT_OPTIONS),
+                                     state="readonly")
                 else:
                     w = ttk.Entry(body, textvariable=var)
                     if kind == "readonly":
@@ -2488,6 +2493,74 @@ class EmployeeApp(tb.Window):
                      font=(FONT, 10), anchor=tk.W, justify=tk.LEFT).pack(
                          side=tk.LEFT, padx=(0, 8))
 
+
+    def open_stats(self):
+        active = [r for r in self.records if not str(r.get("archive", "")).strip()]
+        win = tk.Toplevel(self)
+        win.title("Statistiques")
+        win.configure(bg=COL["surface"])
+        win.geometry("640x600")
+        tk.Label(win, text="📊  Statistiques RH", bg=COL["surface"],
+                 fg=COL["brand"], font=(FONT, 14, "bold")).pack(
+                     anchor=tk.W, padx=16, pady=(14, 8))
+
+        nets = [compute_payroll(r)["net"] for r in active]
+        bruts = [compute_payroll(r)["brut"] for r in active]
+        n = len(active)
+        kpis = [
+            ("Effectif", str(n)),
+            ("Masse brute", fmt_money(sum(bruts))),
+            ("Masse nette", fmt_money(sum(nets))),
+            ("Salaire net moyen", fmt_money(sum(nets) / n) if n else "—"),
+            ("Salaire net max", fmt_money(max(nets)) if nets else "—"),
+            ("Salaire net min", fmt_money(min(nets)) if nets else "—"),
+        ]
+        kbox = tk.Frame(win, bg=COL["surface"])
+        kbox.pack(fill=tk.X, padx=16)
+        for i, (lab, val) in enumerate(kpis):
+            cell = tk.Frame(kbox, bg=COL["net_bg"], highlightthickness=1,
+                            highlightbackground=COL["border"])
+            cell.grid(row=i // 3, column=i % 3, sticky="nsew", padx=4, pady=4)
+            kbox.columnconfigure(i % 3, weight=1)
+            tk.Label(cell, text=lab, bg=COL["net_bg"], fg=COL["muted"],
+                     font=(FONT, 8)).pack(anchor=tk.W, padx=8, pady=(6, 0))
+            tk.Label(cell, text=val, bg=COL["net_bg"], fg=COL["brand2"],
+                     font=(FONT, 12, "bold")).pack(anchor=tk.W, padx=8, pady=(0, 6))
+
+        # genre
+        g = {"Homme": 0, "Femme": 0, "—": 0}
+        for r in active:
+            g[r.get("genre") if r.get("genre") in g else "—"] += 1
+        tk.Label(win, text=f"👥 Genre :  Hommes {g['Homme']}   •   "
+                 f"Femmes {g['Femme']}   •   Non précisé {g['—']}",
+                 bg=COL["surface"], fg=COL["text"], font=(FONT, 10, "bold")).pack(
+                     anchor=tk.W, padx=16, pady=(10, 4))
+
+        # par poste / par contrat
+        def agg(field):
+            d = {}
+            for r in active:
+                k = str(r.get(field, "")).strip() or "—"
+                p = compute_payroll(r)
+                cnt, tot = d.get(k, (0, 0.0))
+                d[k] = (cnt + 1, tot + p["net"])
+            return sorted(d.items(), key=lambda kv: -kv[1][0])
+
+        for title, field, cols in (
+                ("Par poste", "poste", ("Poste", "Effectif", "Masse nette")),
+                ("Par type de contrat", "type_contrat",
+                 ("Contrat", "Effectif", "Masse nette"))):
+            tk.Label(win, text=title, bg=COL["surface"], fg=COL["brand2"],
+                     font=(FONT, 10, "bold")).pack(anchor=tk.W, padx=16, pady=(8, 2))
+            tv = ttk.Treeview(win, columns=("k", "n", "m"), show="headings",
+                              height=5)
+            for c, lab in zip(("k", "n", "m"), cols):
+                tv.heading(c, text=lab)
+                tv.column(c, anchor=tk.W if c == "k" else tk.E,
+                          width=240 if c == "k" else 120)
+            tv.pack(fill=tk.X, padx=16)
+            for k, (cnt, tot) in agg(field):
+                tv.insert("", tk.END, values=(k, cnt, fmt_money(tot)))
 
     def open_calendar(self):
         today = dt.date.today()
