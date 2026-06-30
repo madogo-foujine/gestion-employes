@@ -5,7 +5,7 @@
 [Setup]
 AppId={{B7E4A2C1-9F3D-4E58-A1B2-EMP-PAIE-MAROC}}
 AppName=Gestion des Employes
-AppVersion=1.0
+AppVersion=1.1
 AppPublisher=Ma Societe
 DefaultDirName={autopf}\GestionEmployes
 DefaultGroupName=Gestion des Employes
