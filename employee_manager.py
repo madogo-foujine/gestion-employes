@@ -229,6 +229,8 @@ FIELDS = [
     ("personnes_charge", "Personnes à charge", "admin", "number"),
 
     ("primes",          "Primes",             "fin",    "number"),
+    ("prime_transport", "Prime de transport", "fin",    "number"),
+    ("indemnite_logement", "Indemnité logement", "fin", "number"),
     ("retenues",        "Autres retenues",    "fin",    "number"),
     ("retenue_avance",  "Retenue avance",     "fin",    "number"),
     ("jours_absence",   "Jours d'absence",    "fin",    "number"),
@@ -309,6 +311,8 @@ TR = {
         "f_type_contrat": "Type de contrat", "f_date_fin_contrat": "Fin de contrat",
         "f_cnss": "N° CNSS", "f_personnes_charge": "Personnes à charge",
         "f_primes": "Primes", "f_retenues": "Autres retenues",
+        "f_prime_transport": "Prime de transport",
+        "f_indemnite_logement": "Indemnité de logement",
         "f_retenue_avance": "Retenue avance", "f_jours_absence": "Jours d'absence",
         "b_close": "Fermer", "b_add": "Ajouter", "b_save": "Enregistrer",
         "b_delete": "Supprimer", "b_restore": "Restaurer", "b_approve": "Approuver",
@@ -363,6 +367,8 @@ TR = {
         "f_type_contrat": "نوع العقد", "f_date_fin_contrat": "نهاية العقد",
         "f_cnss": "رقم CNSS", "f_personnes_charge": "الأشخاص في الكفالة",
         "f_primes": "العلاوات", "f_retenues": "اقتطاعات أخرى",
+        "f_prime_transport": "تعويض النقل",
+        "f_indemnite_logement": "تعويض السكن",
         "f_retenue_avance": "اقتطاع السلفة", "f_jours_absence": "أيام الغياب",
         "b_close": "إغلاق", "b_add": "إضافة", "b_save": "حفظ",
         "b_delete": "حذف", "b_restore": "استرجاع", "b_approve": "قبول",
@@ -417,6 +423,8 @@ TR = {
         "f_type_contrat": "Contract type", "f_date_fin_contrat": "Contract end",
         "f_cnss": "CNSS no.", "f_personnes_charge": "Dependents",
         "f_primes": "Bonuses", "f_retenues": "Other deductions",
+        "f_prime_transport": "Transport allowance",
+        "f_indemnite_logement": "Housing allowance",
         "f_retenue_avance": "Advance deduction", "f_jours_absence": "Absence days",
         "b_close": "Close", "b_add": "Add", "b_save": "Save",
         "b_delete": "Delete", "b_restore": "Restore", "b_approve": "Approve",
@@ -530,12 +538,15 @@ def compute_ir_brut(sni: float) -> float:
 def compute_payroll(rec: dict) -> dict:
     base = to_float(rec.get("salaire_base"))
     primes = to_float(rec.get("primes"))
+    transport = to_float(rec.get("prime_transport"))
+    logement = to_float(rec.get("indemnite_logement"))
     autres = to_float(rec.get("retenues"))
     avance = to_float(rec.get("retenue_avance"))
     jours_abs = to_float(rec.get("jours_absence"))
     charges = int(to_float(rec.get("personnes_charge")))
 
-    brut = base + primes
+    primes_tot = primes + transport + logement
+    brut = base + primes_tot
     daily = base / JOURS_OUVRABLES if JOURS_OUVRABLES else 0
     ded_absence = round(daily * jours_abs, 2)
 
@@ -550,6 +561,7 @@ def compute_payroll(rec: dict) -> dict:
     net = round(brut - cnss - amo - ir - autres - avance - ded_absence, 2)
     return {
         "base": round(base, 2), "primes": round(primes, 2),
+        "transport": round(transport, 2), "logement": round(logement, 2),
         "brut": round(brut, 2), "cnss": cnss, "amo": amo, "fp": fp,
         "sni": round(sni, 2), "ir": ir, "ded_absence": ded_absence,
         "autres": round(autres, 2), "avance": round(avance, 2),
@@ -867,7 +879,6 @@ class EmployeeApp(tb.Window):
         self.configure(bg=COL["bg"])
 
         self.withdraw()
-        self._show_splash()
 
         self.store = ExcelStore(DEFAULT_FILE)
         self.pointage = PointageStore(DEFAULT_FILE)
@@ -882,13 +893,19 @@ class EmployeeApp(tb.Window):
         self.current_index: int | None = None
 
         if not self._require_login():
-            self._close_splash()
             self.destroy()
             return
 
-        self.build_ui()
-        self.reload()
-        self.after(1500, self._close_splash)
+        if not self.config_data.get("setup_done"):
+            self._first_run_setup()
+            self.build_ui()
+            self.reload()
+            self.deiconify()
+        else:
+            self._show_splash()
+            self.build_ui()
+            self.reload()
+            self.after(1500, self._close_splash)
 
     def build_ui(self):
         for child in self.winfo_children():
@@ -1084,8 +1101,23 @@ class EmployeeApp(tb.Window):
         tk.Label(left, text=t("app_sub"),
                  bg=COL["brand"], fg="#a7d7bd", font=(FONT, 9)).pack(anchor=tk.W)
 
+        # logo de la société (si défini)
+        self._header_logo_img = None
+        if LOGO_PATH and HAS_PIL and os.path.exists(LOGO_PATH):
+            try:
+                img = Image.open(LOGO_PATH).convert("RGBA")
+                ratio = 46 / img.height
+                img = img.resize((max(1, int(img.width * ratio)), 46),
+                                 Image.LANCZOS)
+                self._header_logo_img = ImageTk.PhotoImage(img)
+                logo_lab = tk.Label(bar, image=self._header_logo_img,
+                                    bg=COL["brand"])
+                logo_lab.pack(side=tk.RIGHT, padx=18)
+            except Exception:  # noqa: BLE001
+                self._header_logo_img = None
+
         right = tk.Frame(bar, bg=COL["brand"])
-        right.pack(side=tk.RIGHT, padx=18)
+        right.pack(side=tk.RIGHT, padx=(0 if self._header_logo_img else 18, 8))
         tk.Label(right, text=COMPANY_NAME, bg=COL["brand"], fg="white",
                  font=(FONT, 14, "bold")).pack(anchor=tk.E, pady=(10, 0))
         role = getattr(self, "role", "admin")
@@ -1718,6 +1750,8 @@ class EmployeeApp(tb.Window):
                  font=(FONT, 9, "bold")).pack(anchor=tk.W, pady=(0, 4))
         self._detail_line(gains, "base", "Salaire de base")
         self._detail_line(gains, "primes", "Primes")
+        self._detail_line(gains, "transport", t("f_prime_transport", "Transport"))
+        self._detail_line(gains, "logement", t("f_indemnite_logement", "Logement"))
         self._detail_line(gains, "brut", "Salaire brut", strong=True)
 
         rets = tk.Frame(body, bg=COL["surface"])
@@ -1926,8 +1960,9 @@ class EmployeeApp(tb.Window):
         self.net_var.set(fmt_money(p["net"]) if has_data else "—")
         self.render_avatar(rec.get("nom") or "")
 
-        for k in ("base", "primes", "brut", "cnss", "amo", "ir",
-                  "ded_absence", "autres", "avance", "total_retenues"):
+        for k in ("base", "primes", "transport", "logement", "brut", "cnss",
+                  "amo", "ir", "ded_absence", "autres", "avance",
+                  "total_retenues"):
             self.detail[k].set(fmt_money(p[k]))
         self.detail["net"].set(fmt_money(p["net"]) if has_data else "—")
         self.detail["id"].set(rec.get("id") or "—")
@@ -2201,6 +2236,8 @@ class EmployeeApp(tb.Window):
         lines = (
             line("Salaire de base", fmt_money(p["base"])) +
             line("Primes / indemnités", fmt_money(p["primes"])) +
+            line("Prime de transport", fmt_money(p["transport"])) +
+            line("Indemnité de logement", fmt_money(p["logement"])) +
             line("CNSS (4.48%)", "", fmt_money(p["cnss"])) +
             line("AMO (2.26%)", "", fmt_money(p["amo"])) +
             line("IR (impôt sur le revenu)", "", fmt_money(p["ir"])) +
@@ -3208,6 +3245,8 @@ class EmployeeApp(tb.Window):
 
         rows = [("Salaire de base", fmt_money(p["base"]), ""),
                 ("Primes / indemnités", fmt_money(p["primes"]), ""),
+                ("Prime de transport", fmt_money(p["transport"]), ""),
+                ("Indemnité de logement", fmt_money(p["logement"]), ""),
                 ("CNSS (4.48%)", "", fmt_money(p["cnss"])),
                 ("AMO (2.26%)", "", fmt_money(p["amo"])),
                 ("IR (impôt)", "", fmt_money(p["ir"])),
@@ -4174,6 +4213,78 @@ class EmployeeApp(tb.Window):
         self.bind("<Control-s>", lambda e: self.save_record())
         self.bind("<Control-f>", lambda e: self._focus_search())
         self.bind("<Control-p>", lambda e: self.export_pdf())
+
+    def _first_run_setup(self):
+        """Assistant de première utilisation : société, langue, logo."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Configuration")
+        dlg.configure(bg=COL["surface"])
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        dlg.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        head = tk.Frame(dlg, bg=COL["brand"])
+        head.pack(fill=tk.X)
+        tk.Label(head, text="👋  Bienvenue • مرحبًا • Welcome", bg=COL["brand"],
+                 fg="white", font=(FONT, 15, "bold")).pack(padx=30, pady=16)
+
+        body = tk.Frame(dlg, bg=COL["surface"])
+        body.pack(fill=tk.BOTH, expand=True, padx=26, pady=18)
+
+        def row(label):
+            tk.Label(body, text=label, bg=COL["surface"], fg=COL["text"],
+                     font=(FONT, 10, "bold")).pack(anchor=tk.W, pady=(8, 2))
+
+        row("Langue • اللغة • Language")
+        lang_names = {v: k for k, v in LANG_NAMES.items()}
+        v_lang = tk.StringVar(value=LANG_NAMES.get(LANG, "Français"))
+        ttk.Combobox(body, textvariable=v_lang, state="readonly",
+                     values=list(LANG_NAMES.values()), width=34).pack(anchor=tk.W)
+
+        row("Nom de la société • اسم الشركة • Company name")
+        v_name = tk.StringVar(value="" if COMPANY_NAME == "Ma Société"
+                              else COMPANY_NAME)
+        ent = ttk.Entry(body, textvariable=v_name, width=36)
+        ent.pack(anchor=tk.W)
+        ent.focus_set()
+
+        row("Logo (optionnel) • شعار • Logo")
+        v_logo = tk.StringVar(value=LOGO_PATH)
+        lbox = tk.Frame(body, bg=COL["surface"])
+        lbox.pack(anchor=tk.W, fill=tk.X)
+        tk.Label(lbox, textvariable=v_logo, bg=COL["surface"], fg=COL["muted"],
+                 font=(FONT, 8), width=28, anchor=tk.W).pack(side=tk.LEFT)
+
+        def pick_logo():
+            p = filedialog.askopenfilename(
+                title="Logo", parent=dlg,
+                filetypes=[("Images", "*.png *.jpg *.jpeg *.gif *.bmp")])
+            if p:
+                v_logo.set(p)
+
+        tb.Button(lbox, text="📷", bootstyle="secondary-outline",
+                  command=pick_logo).pack(side=tk.LEFT, padx=4)
+        tb.Button(lbox, text="✖", bootstyle="secondary-outline",
+                  command=lambda: v_logo.set("")).pack(side=tk.LEFT)
+
+        def start():
+            name = v_name.get().strip() or "Ma Société"
+            self.config_data["company_name"] = name
+            self.config_data["lang"] = lang_names.get(v_lang.get(), "fr")
+            self.config_data["logo_path"] = v_logo.get().strip()
+            self.config_data["setup_done"] = True
+            save_config(self.config_data)
+            apply_config_settings(self.config_data)
+            dlg.destroy()
+
+        tb.Button(body, text="🚀  Démarrer • ابدأ • Start", bootstyle="success",
+                  command=start).pack(anchor=tk.E, pady=(18, 0))
+
+        dlg.update_idletasks()
+        x = (self.winfo_screenwidth() - dlg.winfo_width()) // 2
+        y = (self.winfo_screenheight() - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{max(0, x)}+{max(0, y)}")
+        self.wait_window(dlg)
 
     def _show_splash(self):
         try:
