@@ -68,6 +68,9 @@ logging.basicConfig(
 log = logging.getLogger("employee_manager")
 JOURS_OUVRABLES = 26
 LEAVE_PER_MONTH = 1.5
+STD_START = "09:00"                    # ساعة بداية العمل (لحساب التأخير)
+STD_DAILY_HOURS = 8.0                  # ساعات العمل القياسية فاليوم
+OVERTIME_RATE = 1.25                   # معامل الساعات الإضافية
 
 PLAFOND_CNSS = 6000.0
 TAUX_CNSS = 0.0448
@@ -261,6 +264,34 @@ def to_float(value) -> float:
 
 def fmt_money(value) -> str:
     return f"{to_float(value):,.2f}".replace(",", " ") + " DH"
+
+
+def parse_time(value):
+    """'HH:MM' -> minutes depuis minuit, ou None."""
+    if not value:
+        return None
+    txt = str(value).strip().replace("h", ":").replace("H", ":")
+    parts = txt.split(":")
+    try:
+        h = int(parts[0])
+        m = int(parts[1]) if len(parts) > 1 and parts[1] != "" else 0
+    except (ValueError, IndexError):
+        return None
+    if 0 <= h <= 23 and 0 <= m <= 59:
+        return h * 60 + m
+    return None
+
+
+def compute_day_hours(t_in, t_out):
+    """كيرجع (heures, retard_min, heures_sup) ليوم واحد."""
+    mi, mo = parse_time(t_in), parse_time(t_out)
+    if mi is None or mo is None or mo <= mi:
+        return 0.0, 0, 0.0
+    hours = round((mo - mi) / 60, 2)
+    start = parse_time(STD_START) or 0
+    retard = max(0, mi - start)
+    sup = round(max(0.0, hours - STD_DAILY_HOURS), 2)
+    return hours, retard, sup
 
 
 def parse_date(value):
@@ -607,6 +638,34 @@ class LeaveStore:
                    if r.get("type") == "Annuel" and r.get("status") == "Approuvé")
 
 
+class HoursStore:
+    def __init__(self, excel_path: Path):
+        self.path = Path(excel_path).parent / "hours.json"
+
+    def _load(self) -> dict:
+        try:
+            return json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def get_month(self, emp_id, mois: str) -> dict:
+        return self._load().get(str(emp_id), {}).get(mois, {})
+
+    def set_day(self, emp_id, mois: str, day: int, t_in: str, t_out: str):
+        data = self._load()
+        emp = data.setdefault(str(emp_id), {})
+        month = emp.setdefault(mois, {})
+        if not t_in and not t_out:
+            month.pop(str(day), None)
+        else:
+            month[str(day)] = {"in": t_in, "out": t_out}
+        try:
+            self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+        except OSError:
+            log.exception("Echec de l'ecriture des heures")
+
+
 class EmployeeApp(tb.Window):
     def __init__(self):
         cfg = load_config()
@@ -632,6 +691,7 @@ class EmployeeApp(tb.Window):
         self.advances = AdvancesStore(DEFAULT_FILE)
         self.audit = AuditStore(DEFAULT_FILE)
         self.leaves = LeaveStore(DEFAULT_FILE)
+        self.hours = HoursStore(DEFAULT_FILE)
         self.records: list[dict] = []
         self.vars: dict[str, tk.StringVar] = {}
         self.detail: dict[str, tk.StringVar] = {}
@@ -869,6 +929,8 @@ class EmployeeApp(tb.Window):
         m_paie.add_command(label="📅  Pointage…", command=self.open_pointage)
         m_paie.add_command(label="🗓  Calendrier annuel…",
                            command=self.open_year_pointage)
+        m_paie.add_command(label="🕐  Heures (entrée/sortie)…",
+                           command=self.open_hours)
         m_paie.add_command(label="💳  Avances…", command=self.open_advances)
         m_paie.add_command(label="🏖  Congés…", command=self.open_leaves)
         m_paie.add_command(label="📎  Documents…", command=self.open_documents)
@@ -1571,6 +1633,7 @@ class EmployeeApp(tb.Window):
         self.advances = AdvancesStore(Path(path))
         self.audit = AuditStore(Path(path))
         self.leaves = LeaveStore(Path(path))
+        self.hours = HoursStore(Path(path))
         self.reload()
 
     def reload(self):
@@ -3100,6 +3163,156 @@ class EmployeeApp(tb.Window):
         tb.Button(bb, text="Fermer", bootstyle="secondary-outline",
                   command=win.destroy).pack(side=tk.RIGHT)
         refresh()
+
+    def open_hours(self):
+        if self.current_index is None:
+            messagebox.showinfo("اختار خدام", "اختار شي خدام الأول.")
+            return
+        rec = self.records[self.current_index]
+        emp_id = rec.get("id")
+        today = dt.date.today()
+        st = {"y": today.year, "m": today.month, "sup": 0.0}
+        fr_months = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+                     "Juillet", "Août", "Septembre", "Octobre", "Novembre",
+                     "Décembre"]
+
+        win = tk.Toplevel(self)
+        win.title(f"Heures — {rec.get('nom', '')}")
+        win.configure(bg=COL["surface"])
+        win.geometry("620x600")
+        tk.Label(win, text=f"🕐  Heures (entrée/sortie) — {rec.get('nom', '')}",
+                 bg=COL["surface"], fg=COL["brand"], font=(FONT, 13, "bold")).pack(
+                     anchor=tk.W, padx=16, pady=(14, 2))
+        tk.Label(win, text=f"Début standard {STD_START} · journée {STD_DAILY_HOURS}h "
+                 f"· heures sup ×{OVERTIME_RATE}", bg=COL["surface"],
+                 fg=COL["muted"], font=(FONT, 8)).pack(anchor=tk.W, padx=16)
+
+        nav = tk.Frame(win, bg=COL["surface"])
+        nav.pack(padx=16, pady=4)
+        month_lbl = tk.Label(nav, bg=COL["surface"], fg=COL["text"],
+                             font=(FONT, 12, "bold"), width=16)
+        tb.Button(nav, text="◀", bootstyle="secondary-outline",
+                  command=lambda: shift(-1)).pack(side=tk.LEFT)
+        month_lbl.pack(side=tk.LEFT, padx=8)
+        tb.Button(nav, text="▶", bootstyle="secondary-outline",
+                  command=lambda: shift(1)).pack(side=tk.LEFT)
+
+        cols = ("jour", "in", "out", "h", "ret", "sup")
+        tree = ttk.Treeview(win, columns=cols, show="headings", height=12)
+        for c, lab, w in (("jour", "Jour", 80), ("in", "Entrée", 80),
+                          ("out", "Sortie", 80), ("h", "Heures", 70),
+                          ("ret", "Retard(min)", 90), ("sup", "Sup(h)", 70)):
+            tree.heading(c, text=lab)
+            tree.column(c, width=w, anchor=tk.CENTER)
+        tree.pack(fill=tk.BOTH, expand=True, padx=16, pady=6)
+
+        totals = tk.Label(win, bg=COL["surface"], fg=COL["brand2"],
+                          font=(FONT, 10, "bold"))
+        totals.pack(anchor=tk.W, padx=16)
+
+        form = tk.Frame(win, bg=COL["surface"])
+        form.pack(fill=tk.X, padx=16, pady=6)
+        v_day = tk.StringVar(value=str(today.day))
+        v_in = tk.StringVar()
+        v_out = tk.StringVar()
+        for i, (lab, var, wdt) in enumerate(
+                (("Jour", v_day, 5), ("Entrée", v_in, 7), ("Sortie", v_out, 7))):
+            tk.Label(form, text=lab, bg=COL["surface"], fg=COL["muted"],
+                     font=(FONT, 9)).grid(row=0, column=i * 2, padx=(6, 2))
+            ttk.Entry(form, textvariable=var, width=wdt).grid(
+                row=0, column=i * 2 + 1, padx=2)
+
+        def render():
+            tree.delete(*tree.get_children())
+            y, m = st["y"], st["m"]
+            month_lbl.config(text=f"{fr_months[m]} {y}")
+            mois = f"{y}-{m:02d}"
+            data = self.hours.get_month(emp_id, mois)
+            ndays = calendar.monthrange(y, m)[1]
+            th = tr = ts = 0.0
+            for d in range(1, ndays + 1):
+                day = data.get(str(d), {})
+                ti, to = day.get("in", ""), day.get("out", "")
+                h, ret, sup = compute_day_hours(ti, to)
+                th += h; tr += ret; ts += sup
+                tree.insert("", tk.END, iid=str(d), values=(
+                    f"{d:02d}/{m:02d}", ti or "—", to or "—",
+                    h or "—", ret or "—", sup or "—"))
+            st["sup"] = round(ts, 2)
+            totals.config(text=f"Total : {round(th,2)} h   •   Retard : "
+                               f"{int(tr)} min   •   Heures sup : {round(ts,2)} h")
+
+        def shift(delta):
+            m = st["m"] + delta
+            y = st["y"]
+            if m < 1:
+                m, y = 12, y - 1
+            elif m > 12:
+                m, y = 1, y + 1
+            st["m"], st["y"] = m, y
+            render()
+
+        def fill_from_row(_e=None):
+            sel = tree.selection()
+            if not sel:
+                return
+            d = int(sel[0])
+            mois = f"{st['y']}-{st['m']:02d}"
+            day = self.hours.get_month(emp_id, mois).get(str(d), {})
+            v_day.set(str(d)); v_in.set(day.get("in", "")); v_out.set(day.get("out", ""))
+
+        tree.bind("<Double-1>", fill_from_row)
+
+        def save_day():
+            try:
+                d = int(v_day.get())
+            except ValueError:
+                messagebox.showwarning("Jour", "Numéro de jour invalide.", parent=win)
+                return
+            ndays = calendar.monthrange(st["y"], st["m"])[1]
+            if not (1 <= d <= ndays):
+                messagebox.showwarning("Jour", f"Jour entre 1 et {ndays}.",
+                                       parent=win)
+                return
+            ti, to = v_in.get().strip(), v_out.get().strip()
+            if ti and parse_time(ti) is None or to and parse_time(to) is None:
+                messagebox.showwarning("Heure", "Format heure invalide (HH:MM).",
+                                       parent=win)
+                return
+            mois = f"{st['y']}-{st['m']:02d}"
+            self.hours.set_day(emp_id, mois, d, ti, to)
+            v_in.set(""); v_out.set("")
+            render()
+
+        def apply_overtime():
+            base = to_float(rec.get("salaire_base"))
+            hourly = base / (JOURS_OUVRABLES * STD_DAILY_HOURS) \
+                if JOURS_OUVRABLES and STD_DAILY_HOURS else 0
+            amount = round(st["sup"] * hourly * OVERTIME_RATE, 2)
+            if amount <= 0:
+                messagebox.showinfo("Heures sup", "Aucune heure sup ce mois.",
+                                    parent=win)
+                return
+            if not messagebox.askyesno(
+                    "Heures sup → Primes",
+                    f"Ajouter {fmt_money(amount)} ({st['sup']} h sup) aux primes ?",
+                    parent=win):
+                return
+            cur = to_float(self.vars["primes"].get())
+            self.vars["primes"].set(f"{cur + amount:.2f}")
+            self.save_record()
+            win.destroy()
+
+        tb.Button(form, text="💾  Jour", bootstyle="success",
+                  command=save_day).grid(row=0, column=6, padx=8)
+
+        bb = tk.Frame(win, bg=COL["surface"])
+        bb.pack(fill=tk.X, padx=16, pady=(0, 14))
+        tb.Button(bb, text="➕  Heures sup → Primes", bootstyle="info",
+                  command=apply_overtime).pack(side=tk.LEFT)
+        tb.Button(bb, text="Fermer", bootstyle="secondary-outline",
+                  command=win.destroy).pack(side=tk.RIGHT)
+        render()
 
     def open_documents(self):
         if self.current_index is None:

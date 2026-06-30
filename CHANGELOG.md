@@ -4,21 +4,33 @@ Tous les changements notables de ce projet sont documentés dans ce fichier.
 
 ## [Non publié]
 
-### Sécurité
-- Mots de passe : remplacement de SHA-256 par **scrypt** (mémoire-dur, `hashlib`),
-  avec sel aléatoire et compatibilité ascendante (les anciens hachages SHA-256
-  restent vérifiables). Comparaison à temps constant (`secrets.compare_digest`).
-- Validation des valeurs du fichier de configuration (plages contrôlées,
-  retour aux valeurs par défaut si invalides).
-- Validation des saisies utilisateur (champs numériques ≥ 0, dates valides).
-- Journalisation des erreurs (`logging`) au lieu d'`except … : pass` silencieux.
+### Interface
+- Interface modernisée avec **ttkbootstrap** (thèmes clair *flatly* / sombre
+  *darkly*, boutons colorés avec effet *hover*).
+- **Splash screen** au démarrage (logo, version, barre de chargement).
+- **Raccourcis clavier** : Ctrl+N (nouveau), Ctrl+S (enregistrer),
+  Ctrl+F (recherche), Ctrl+P (bulletin).
+- **Tooltips** sur la barre d'outils, **notifications Toast** non intrusives.
 
 ### Ajouté
-- Tableau de bord enrichi : 5 indicateurs (Effectif, Masse brute, Masse nette,
-  Net moyen, Total IR).
-- Suite de tests unitaires (`tests/`) avec `pytest` : moteur de paie + sécurité.
-- Intégration continue (GitHub Actions) : tests + build de l'exécutable Windows.
-- Documentation : `CHANGELOG.md` et `docs/FEATURES.md`.
+- **Journal d'audit** : chaque opération (ajout, modification, suppression,
+  archivage, congés) est tracée (date, utilisateur) — lecture seule.
+- **Archivage des employés** (suppression douce) avec restauration.
+- **Système de congés** : demandes, approbation/refus, types
+  (annuel/maladie/sans solde), solde lié au calcul des congés.
+- **Heures (entrée/sortie)** : saisie par jour, calcul automatique des heures
+  travaillées, du retard et des **heures supplémentaires** (×1,25), report
+  possible sur les primes.
+- Tableau de bord enrichi : 5 indicateurs (effectif, masse brute/nette,
+  net moyen, total IR).
+- Recherche élargie (ID, e-mail), tests `pytest` (paie, sécurité, temps),
+  intégration continue GitHub Actions, `CHANGELOG.md`, `docs/FEATURES.md`.
+
+### Sécurité
+- Mots de passe : **scrypt** (au lieu de SHA-256), sel aléatoire, comparaison
+  à temps constant, compatibilité ascendante.
+- Validation de la configuration et des saisies utilisateur.
+- Journalisation des erreurs (`logging`).
 
 ## [1.0] - 2026-06-29
 
@@ -26,7 +38,7 @@ Tous les changements notables de ce projet sont documentés dans ce fichier.
 - Gestion des employés reliée à un fichier Excel (`employes.xlsx`).
 - Moteur de paie marocain : CNSS, AMO, frais professionnels, IR (barème
   progressif paramétrable), net à payer.
-- Pointage mensuel, calendrier annuel, congés, avances sur salaire.
+- Pointage mensuel, calendrier annuel, congés (solde), avances sur salaire.
 - Bulletins de paie (PDF/HTML), attestations, contrat de travail, déclaration
   CNSS, état de paie (HTML/Excel) — avec logo et signature.
 - Numérotation séquentielle des documents et registre.
