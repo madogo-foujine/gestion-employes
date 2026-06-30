@@ -963,6 +963,7 @@ class EmployeeApp(tb.Window):
                            command=self.open_graph)
         m_view.add_command(label="📉  Évolution mensuelle",
                            command=self.open_evolution)
+        m_view.add_command(label="📆  Calendrier", command=self.open_calendar)
         m_view.add_command(label="🧮  Simulateur de salaire",
                            command=self.open_simulateur)
         m_view.add_command(label="🗂  Registre des documents",
@@ -2487,6 +2488,107 @@ class EmployeeApp(tb.Window):
                      font=(FONT, 10), anchor=tk.W, justify=tk.LEFT).pack(
                          side=tk.LEFT, padx=(0, 8))
 
+
+    def open_calendar(self):
+        today = dt.date.today()
+        st = {"y": today.year, "m": today.month}
+        fr_months = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+                     "Juillet", "Août", "Septembre", "Octobre", "Novembre",
+                     "Décembre"]
+
+        win = tk.Toplevel(self)
+        win.title("Calendrier")
+        win.configure(bg=COL["surface"])
+        win.geometry("720x560")
+        tk.Label(win, text="📆  Calendrier", bg=COL["surface"], fg=COL["brand"],
+                 font=(FONT, 14, "bold")).pack(anchor=tk.W, padx=16, pady=(14, 2))
+        tk.Label(win, text="🎂 anniversaire   📄 fin de contrat   "
+                 "🏖 congé   💰 paie", bg=COL["surface"], fg=COL["muted"],
+                 font=(FONT, 9)).pack(anchor=tk.W, padx=16)
+
+        nav = tk.Frame(win, bg=COL["surface"])
+        nav.pack(pady=4)
+        month_lbl = tk.Label(nav, bg=COL["surface"], fg=COL["text"],
+                             font=(FONT, 12, "bold"), width=18)
+        tb.Button(nav, text="◀", bootstyle="secondary-outline",
+                  command=lambda: shift(-1)).pack(side=tk.LEFT)
+        month_lbl.pack(side=tk.LEFT, padx=8)
+        tb.Button(nav, text="▶", bootstyle="secondary-outline",
+                  command=lambda: shift(1)).pack(side=tk.LEFT)
+
+        grid = tk.Frame(win, bg=COL["surface"])
+        grid.pack(fill=tk.BOTH, expand=True, padx=12, pady=8)
+
+        def events_for(d):
+            evs = []
+            for rec in self.records:
+                if str(rec.get("archive", "")).strip():
+                    continue
+                nom = rec.get("nom", "")
+                dn = parse_date(rec.get("date_naissance"))
+                if dn and (dn.month, dn.day) == (d.month, d.day):
+                    evs.append(("🎂", f"Anniversaire — {nom}"))
+                df = parse_date(rec.get("date_fin_contrat"))
+                if df == d:
+                    evs.append(("📄", f"Fin de contrat — {nom}"))
+                for r in self.leaves.list(rec.get("id")):
+                    if r.get("status") != "Approuvé":
+                        continue
+                    s, e = parse_date(r.get("start")), parse_date(r.get("end"))
+                    if s and e and s <= d <= e:
+                        evs.append(("🏖", f"Congé — {nom}"))
+            if d.day == calendar.monthrange(d.year, d.month)[1]:
+                evs.append(("💰", "Jour de paie"))
+            return evs
+
+        def show_day(d, evs):
+            if evs:
+                messagebox.showinfo(
+                    d.isoformat(),
+                    "\n".join(f"{ic}  {t}" for ic, t in evs), parent=win)
+
+        def render():
+            for w in grid.winfo_children():
+                w.destroy()
+            y, m = st["y"], st["m"]
+            month_lbl.config(text=f"{fr_months[m]} {y}")
+            for i, dn in enumerate(["Lun", "Mar", "Mer", "Jeu", "Ven",
+                                    "Sam", "Dim"]):
+                tk.Label(grid, text=dn, bg=COL["surface"], fg=COL["muted"],
+                         font=(FONT, 9, "bold")).grid(row=0, column=i, pady=(0, 4))
+                grid.columnconfigure(i, weight=1)
+            for r, week in enumerate(calendar.monthcalendar(y, m), start=1):
+                grid.rowconfigure(r, weight=1)
+                for c, day in enumerate(week):
+                    if day == 0:
+                        continue
+                    d = dt.date(y, m, day)
+                    evs = events_for(d)
+                    is_today = (d == today)
+                    bg = COL["net_bg"] if evs else COL["surface"]
+                    cell = tk.Frame(grid, bg=bg, highlightthickness=1,
+                                    highlightbackground=COL["accent"] if is_today
+                                    else COL["border"])
+                    cell.grid(row=r, column=c, sticky="nsew", padx=2, pady=2)
+                    tk.Label(cell, text=str(day), bg=bg, fg=COL["text"],
+                             font=(FONT, 10, "bold")).pack(anchor=tk.W, padx=4)
+                    icons = "".join(dict.fromkeys(ic for ic, _ in evs))
+                    tk.Label(cell, text=icons, bg=bg,
+                             font=(FONT, 10)).pack(anchor=tk.W, padx=4)
+                    for wdg in (cell, *cell.winfo_children()):
+                        wdg.bind("<Button-1>", lambda e, dd=d, ev=evs: show_day(dd, ev))
+
+        def shift(delta):
+            m = st["m"] + delta
+            y = st["y"]
+            if m < 1:
+                m, y = 12, y - 1
+            elif m > 12:
+                m, y = 1, y + 1
+            st["m"], st["y"] = m, y
+            render()
+
+        render()
 
     def open_year_pointage(self):
         if self.current_index is None:
