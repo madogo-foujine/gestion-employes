@@ -310,6 +310,16 @@ TR = {
         "f_cnss": "N° CNSS", "f_personnes_charge": "Personnes à charge",
         "f_primes": "Primes", "f_retenues": "Autres retenues",
         "f_retenue_avance": "Retenue avance", "f_jours_absence": "Jours d'absence",
+        "b_close": "Fermer", "b_add": "Ajouter", "b_save": "Enregistrer",
+        "b_delete": "Supprimer", "b_restore": "Restaurer", "b_approve": "Approuver",
+        "b_reject": "Refuser", "b_cancel": "Annuler", "b_apply": "Appliquer",
+        "m_pick_emp": "Sélectionnez d'abord un employé.",
+        "m_need_name": "Veuillez saisir au moins le nom complet.",
+        "m_invalid": "Données invalides",
+        "m_file_locked": "Fichier Excel verrouillé. Fermez-le puis réessayez.",
+        "m_empty": "Aucun employé.", "m_saved": "Employé enregistré",
+        "m_archived": "Employé archivé", "m_deleted": "Employé supprimé",
+        "m_restored": "Restauré", "m_done": "Terminé",
     },
     "ar": {
         "app_title": "تسيير الموظفين والأجور",
@@ -354,6 +364,16 @@ TR = {
         "f_cnss": "رقم CNSS", "f_personnes_charge": "الأشخاص في الكفالة",
         "f_primes": "العلاوات", "f_retenues": "اقتطاعات أخرى",
         "f_retenue_avance": "اقتطاع السلفة", "f_jours_absence": "أيام الغياب",
+        "b_close": "إغلاق", "b_add": "إضافة", "b_save": "حفظ",
+        "b_delete": "حذف", "b_restore": "استرجاع", "b_approve": "قبول",
+        "b_reject": "رفض", "b_cancel": "إلغاء", "b_apply": "تطبيق",
+        "m_pick_emp": "اختر موظفاً أولاً.",
+        "m_need_name": "الرجاء إدخال الاسم الكامل على الأقل.",
+        "m_invalid": "بيانات غير صحيحة",
+        "m_file_locked": "ملف Excel مقفل. أغلقه ثم أعد المحاولة.",
+        "m_empty": "لا يوجد موظفون.", "m_saved": "تم حفظ الموظف",
+        "m_archived": "تمت أرشفة الموظف", "m_deleted": "تم حذف الموظف",
+        "m_restored": "تم الاسترجاع", "m_done": "تم",
     },
     "en": {
         "app_title": "Employee & Payroll Management",
@@ -398,6 +418,16 @@ TR = {
         "f_cnss": "CNSS no.", "f_personnes_charge": "Dependents",
         "f_primes": "Bonuses", "f_retenues": "Other deductions",
         "f_retenue_avance": "Advance deduction", "f_jours_absence": "Absence days",
+        "b_close": "Close", "b_add": "Add", "b_save": "Save",
+        "b_delete": "Delete", "b_restore": "Restore", "b_approve": "Approve",
+        "b_reject": "Reject", "b_cancel": "Cancel", "b_apply": "Apply",
+        "m_pick_emp": "Please select an employee first.",
+        "m_need_name": "Please enter at least the full name.",
+        "m_invalid": "Invalid data",
+        "m_file_locked": "Excel file is locked. Close it and retry.",
+        "m_empty": "No employees.", "m_saved": "Employee saved",
+        "m_archived": "Employee archived", "m_deleted": "Employee deleted",
+        "m_restored": "Restored", "m_done": "Done",
     },
 }
 
@@ -964,7 +994,7 @@ class EmployeeApp(tb.Window):
         btns.pack(pady=(10, 18))
         tb.Button(btns, text="OK", bootstyle="success",
                    command=ok).pack(side=tk.LEFT, padx=6)
-        tb.Button(btns, text="Annuler", bootstyle="secondary-outline",
+        tb.Button(btns, text=t("b_cancel"), bootstyle="secondary-outline",
                    command=cancel).pack(side=tk.LEFT, padx=6)
         dlg.bind("<Return>", ok)
         dlg.bind("<Escape>", cancel)
@@ -1305,7 +1335,7 @@ class EmployeeApp(tb.Window):
         btns.grid(row=logo_row + 3, column=0, columnspan=2, pady=(12, 16))
         tb.Button(btns, text="💾  Enregistrer", bootstyle="success",
                    command=save).pack(side=tk.LEFT, padx=6)
-        tb.Button(btns, text="Annuler", bootstyle="secondary-outline",
+        tb.Button(btns, text=t("b_cancel"), bootstyle="secondary-outline",
                    command=dlg.destroy).pack(side=tk.LEFT, padx=6)
         dlg.columnconfigure(1, weight=1)
         dlg.update_idletasks()
@@ -1362,7 +1392,7 @@ class EmployeeApp(tb.Window):
         bb.pack(pady=(0, 14))
         tb.Button(bb, text="💾  Enregistrer", bootstyle="success",
                    command=save_ir).pack(side=tk.LEFT, padx=6)
-        tb.Button(bb, text="Annuler", bootstyle="secondary-outline",
+        tb.Button(bb, text=t("b_cancel"), bootstyle="secondary-outline",
                    command=dlg.destroy).pack(side=tk.LEFT, padx=6)
         dlg.geometry(f"+{self.winfo_rootx() + 140}+{self.winfo_rooty() + 90}")
 
@@ -1925,7 +1955,7 @@ class EmployeeApp(tb.Window):
     def save_record(self):
         rec = self.collect_form()
         if not rec.get("nom"):
-            messagebox.showwarning("ناقص", "خاصك تكتب على الأقل الاسم الكامل.")
+            messagebox.showwarning(t("app_title"), t("m_need_name"))
             return
 
         errors = []
@@ -1952,7 +1982,7 @@ class EmployeeApp(tb.Window):
             if raw and parse_date(raw) is None:
                 errors.append(f"« {label} » : date invalide (AAAA-MM-JJ).")
         if errors:
-            messagebox.showwarning("Données invalides", "\n".join(errors))
+            messagebox.showwarning(t("m_invalid"), "\n".join(errors))
             return
 
         if not rec.get("id"):
@@ -1974,8 +2004,7 @@ class EmployeeApp(tb.Window):
         try:
             self.store.save_all(self.records)
         except PermissionError:
-            messagebox.showerror("الملف محلول",
-                                 "ملف Excel محلول. سدّو فـExcel وعاود حاول.")
+            messagebox.showerror(t("app_title"), t("m_file_locked"))
             return
         except Exception as exc:
             messagebox.showerror("خطأ فالحفظ", str(exc))
@@ -1985,11 +2014,11 @@ class EmployeeApp(tb.Window):
                        f"{rec.get('nom')} (ID {rec.get('id')})")
         self.reload()
         self._select_by_id(rec["id"])
-        self.toast(f"Employé enregistré : {rec.get('nom')}")
+        self.toast(f"{t('m_saved')} : {rec.get('nom')}")
 
     def archive_record(self):
         if self.current_index is None:
-            messagebox.showinfo("مكاين والو", "اختار شي خدام باش تأرشفو.")
+            messagebox.showinfo(t("app_title"), t("m_pick_emp"))
             return
         rec = self.records[self.current_index]
         if not messagebox.askyesno(
@@ -2005,7 +2034,7 @@ class EmployeeApp(tb.Window):
         self.audit.log(getattr(self, "role", "admin"), "Archivage",
                        f"{rec.get('nom')} (ID {rec.get('id')})")
         self.reload()
-        self.toast(f"Employé archivé : {rec.get('nom')}", "warning")
+        self.toast(f"{t('m_archived')} : {rec.get('nom')}", "warning")
 
     def _select_by_id(self, emp_id):
         for idx, rec in enumerate(self.records):
@@ -2021,7 +2050,7 @@ class EmployeeApp(tb.Window):
         if not self._require_admin():
             return
         if self.current_index is None:
-            messagebox.showinfo("مكاين والو", "اختار شي خدام باش تمسحو.")
+            messagebox.showinfo(t("app_title"), t("m_pick_emp"))
             return
         rec = self.records[self.current_index]
         if not messagebox.askyesno("تأكيد المسح",
@@ -2036,7 +2065,7 @@ class EmployeeApp(tb.Window):
             return
         self.audit.log(getattr(self, "role", "admin"), "Suppression", info)
         self.reload()
-        self.toast("Employé supprimé", "danger")
+        self.toast(t("m_deleted"), "danger")
 
     def open_archived(self):
         archived = [(i, r) for i, r in enumerate(self.records)
@@ -2096,7 +2125,7 @@ class EmployeeApp(tb.Window):
 
         bb = tk.Frame(win, bg=COL["surface"])
         bb.pack(fill=tk.X, padx=16, pady=(0, 14))
-        tb.Button(bb, text="↩  Restaurer", bootstyle="success",
+        tb.Button(bb, text="↩  " + t("b_restore"), bootstyle="success",
                   command=restore).pack(side=tk.LEFT)
         tb.Button(bb, text="🗑  Supprimer définitivement", bootstyle="danger",
                   command=purge).pack(side=tk.LEFT, padx=6)
@@ -2129,7 +2158,7 @@ class EmployeeApp(tb.Window):
     def export_fiche(self):
         rec = self.collect_form()
         if not rec.get("nom"):
-            messagebox.showwarning("ناقص", "اختار شي خدام أو عمر الفيش الأول.")
+            messagebox.showwarning(t("app_title"), t("m_pick_emp"))
             return
         rec["anciennete"] = compute_anciennete(rec.get("date_embauche"))
         out_dir = self.store.path.parent / "fiches"
@@ -2365,8 +2394,7 @@ class EmployeeApp(tb.Window):
         try:
             wb.save(out_file)
         except PermissionError:
-            messagebox.showerror("الملف محلول",
-                                 "سدّ الملف فـExcel وعاود حاول.")
+            messagebox.showerror(t("app_title"), t("m_file_locked"))
             return
         try:
             os.startfile(out_file)
@@ -2439,7 +2467,7 @@ class EmployeeApp(tb.Window):
         try:
             wb.save(out_file)
         except PermissionError:
-            messagebox.showerror("الملف محلول", "سدّ الملف فـExcel وعاود حاول.")
+            messagebox.showerror(t("app_title"), t("m_file_locked"))
             return
         try:
             os.startfile(out_file)
@@ -2827,7 +2855,7 @@ class EmployeeApp(tb.Window):
 
     def open_year_pointage(self):
         if self.current_index is None:
-            messagebox.showinfo("اختار خدام", "اختار شي خدام الأول.")
+            messagebox.showinfo(t("app_title"), t("m_pick_emp"))
             return
         rec = self.records[self.current_index]
         emp_id = rec.get("id")
@@ -2885,14 +2913,14 @@ class EmployeeApp(tb.Window):
             st["y"] += d
             render()
 
-        tb.Button(win, text="Fermer", bootstyle="secondary-outline",
+        tb.Button(win, text=t("b_close"), bootstyle="secondary-outline",
                    command=win.destroy).pack(pady=(0, 14))
         render()
 
 
     def open_pointage(self):
         if self.current_index is None:
-            messagebox.showinfo("اختار خدام", "اختار شي خدام الأول باش تسجل الحضور.")
+            messagebox.showinfo(t("app_title"), t("m_pick_emp"))
             return
         rec = self.records[self.current_index]
         emp_id = rec.get("id")
@@ -3009,7 +3037,7 @@ class EmployeeApp(tb.Window):
         btns.pack(pady=(4, 14))
         tb.Button(btns, text="💾  Enregistrer + appliquer", bootstyle="success",
                    command=save).pack(side=tk.LEFT, padx=6)
-        tb.Button(btns, text="Fermer", bootstyle="secondary-outline",
+        tb.Button(btns, text=t("b_close"), bootstyle="secondary-outline",
                    command=win.destroy).pack(side=tk.LEFT, padx=6)
 
         render()
@@ -3022,7 +3050,7 @@ class EmployeeApp(tb.Window):
             return
         rec = self.collect_form()
         if not rec.get("nom"):
-            messagebox.showwarning("ناقص", "اختار شي خدام أو عمر الفيش الأول.")
+            messagebox.showwarning(t("app_title"), t("m_pick_emp"))
             return
         rec["anciennete"] = compute_anciennete(rec.get("date_embauche"))
         try:
@@ -3085,7 +3113,7 @@ class EmployeeApp(tb.Window):
         try:
             pdf.output(str(out_file))
         except PermissionError:
-            messagebox.showerror("الملف محلول", "سدّ ملف PDF وعاود حاول.")
+            messagebox.showerror(t("app_title"), t("m_file_locked"))
             return
         try:
             os.startfile(out_file)
@@ -3308,7 +3336,7 @@ class EmployeeApp(tb.Window):
 
     def open_advances(self):
         if self.current_index is None:
-            messagebox.showinfo("اختار خدام", "اختار شي خدام الأول.")
+            messagebox.showinfo(t("app_title"), t("m_pick_emp"))
             return
         rec = self.records[self.current_index]
         emp_id = str(rec.get("id"))
@@ -3404,13 +3432,13 @@ class EmployeeApp(tb.Window):
                    bootstyle="success", command=prelever).pack(side=tk.LEFT)
         tb.Button(bb, text="🗑  Supprimer", bootstyle="danger",
                    command=supprimer).pack(side=tk.LEFT, padx=6)
-        tb.Button(bb, text="Fermer", bootstyle="secondary-outline",
+        tb.Button(bb, text=t("b_close"), bootstyle="secondary-outline",
                    command=win.destroy).pack(side=tk.RIGHT)
         refresh()
 
     def open_leaves(self):
         if self.current_index is None:
-            messagebox.showinfo("اختار خدام", "اختار شي خدام الأول.")
+            messagebox.showinfo(t("app_title"), t("m_pick_emp"))
             return
         rec = self.records[self.current_index]
         emp_id = rec.get("id")
@@ -3493,17 +3521,17 @@ class EmployeeApp(tb.Window):
 
         bb = tk.Frame(win, bg=COL["surface"])
         bb.pack(fill=tk.X, padx=16, pady=(0, 14))
-        tb.Button(bb, text="✓  Approuver", bootstyle="success",
+        tb.Button(bb, text="✓  " + t("b_approve"), bootstyle="success",
                   command=lambda: set_status("Approuvé")).pack(side=tk.LEFT)
-        tb.Button(bb, text="✗  Refuser", bootstyle="danger",
+        tb.Button(bb, text="✗  " + t("b_reject"), bootstyle="danger",
                   command=lambda: set_status("Refusé")).pack(side=tk.LEFT, padx=6)
-        tb.Button(bb, text="Fermer", bootstyle="secondary-outline",
+        tb.Button(bb, text=t("b_close"), bootstyle="secondary-outline",
                   command=win.destroy).pack(side=tk.RIGHT)
         refresh()
 
     def open_hours(self):
         if self.current_index is None:
-            messagebox.showinfo("اختار خدام", "اختار شي خدام الأول.")
+            messagebox.showinfo(t("app_title"), t("m_pick_emp"))
             return
         rec = self.records[self.current_index]
         emp_id = rec.get("id")
@@ -3647,13 +3675,13 @@ class EmployeeApp(tb.Window):
         bb.pack(fill=tk.X, padx=16, pady=(0, 14))
         tb.Button(bb, text="➕  Heures sup → Primes", bootstyle="info",
                   command=apply_overtime).pack(side=tk.LEFT)
-        tb.Button(bb, text="Fermer", bootstyle="secondary-outline",
+        tb.Button(bb, text=t("b_close"), bootstyle="secondary-outline",
                   command=win.destroy).pack(side=tk.RIGHT)
         render()
 
     def open_documents(self):
         if self.current_index is None:
-            messagebox.showinfo("اختار خدام", "اختار شي خدام الأول.")
+            messagebox.showinfo(t("app_title"), t("m_pick_emp"))
             return
         rec = self.records[self.current_index]
         emp_id = str(rec.get("id"))
@@ -3820,7 +3848,7 @@ class EmployeeApp(tb.Window):
             messagebox.showinfo("fpdf2 ناقصة", "ثبت:  pip install fpdf2")
             return
         if self.current_index is None:
-            messagebox.showinfo("اختار خدام", "اختار شي خدام الأول.")
+            messagebox.showinfo(t("app_title"), t("m_pick_emp"))
             return
         rec = self.records[self.current_index]
         if not rec.get("nom"):
@@ -3928,7 +3956,7 @@ class EmployeeApp(tb.Window):
             messagebox.showinfo("fpdf2 ناقصة", "ثبت:  pip install fpdf2")
             return
         if self.current_index is None:
-            messagebox.showinfo("اختار خدام", "اختار شي خدام الأول.")
+            messagebox.showinfo(t("app_title"), t("m_pick_emp"))
             return
         rec = self.records[self.current_index]
         if not rec.get("nom"):
