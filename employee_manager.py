@@ -57,6 +57,7 @@ APP_TITLE = "Gestion des Employés & Paie — تسيير الخدامة والأ
 COMPANY_NAME = "Ma Société"
 LOGO_PATH = ""
 SIGN_PATH = ""
+LANG = "fr"                            # langue: fr / ar / en
 DEFAULT_FILE = Path.home() / "employes.xlsx"
 CONFIG_PATH = Path.home() / ".employee_manager.json"
 LOG_PATH = Path.home() / ".employee_manager.log"
@@ -155,9 +156,9 @@ def verify_pw(password: str, cfg: dict) -> bool:
 
 SETTING_DEFAULTS = {
     "company_name": "Ma Société", "logo_path": "", "signature_path": "",
-    "jours_ouvrables": 26, "leave_per_month": 1.5, "plafond_cnss": 6000.0,
-    "taux_cnss": 0.0448, "taux_amo": 0.0226, "seuil_fp": 6500.0,
-    "plafond_fp": 2916.67, "deduction_charge": 30.0,
+    "lang": "fr", "jours_ouvrables": 26, "leave_per_month": 1.5,
+    "plafond_cnss": 6000.0, "taux_cnss": 0.0448, "taux_amo": 0.0226,
+    "seuil_fp": 6500.0, "plafond_fp": 2916.67, "deduction_charge": 30.0,
 }
 
 
@@ -177,12 +178,13 @@ def _num(cfg, key, default, lo, hi, cast=float):
 
 
 def apply_config_settings(cfg: dict) -> None:
-    global COMPANY_NAME, LOGO_PATH, SIGN_PATH, JOURS_OUVRABLES, LEAVE_PER_MONTH
-    global PLAFOND_CNSS, TAUX_CNSS, TAUX_AMO, SEUIL_FP
+    global COMPANY_NAME, LOGO_PATH, SIGN_PATH, LANG, JOURS_OUVRABLES
+    global LEAVE_PER_MONTH, PLAFOND_CNSS, TAUX_CNSS, TAUX_AMO, SEUIL_FP
     global PLAFOND_FP_MENSUEL, DEDUCTION_CHARGE, IR_BRACKETS
     COMPANY_NAME = str(cfg.get("company_name") or "Ma Société")[:120]
     LOGO_PATH = str(cfg.get("logo_path", "") or "")
     SIGN_PATH = str(cfg.get("signature_path", "") or "")
+    LANG = cfg.get("lang", "fr") if cfg.get("lang") in ("fr", "ar", "en") else "fr"
     JOURS_OUVRABLES = _num(cfg, "jours_ouvrables", 26, 1, 31, int)
     LEAVE_PER_MONTH = _num(cfg, "leave_per_month", 1.5, 0, 31)
     PLAFOND_CNSS = _num(cfg, "plafond_cnss", 6000.0, 0, 1_000_000)
@@ -254,6 +256,155 @@ GROUPS = {
 CONTRAT_OPTIONS = ["CDI", "CDD", "ANAPEC", "Stage", "Intérim", "Autre"]
 GENRE_OPTIONS = ["Homme", "Femme"]
 COMBO_VALUES = {"type_contrat": CONTRAT_OPTIONS, "genre": GENRE_OPTIONS}
+
+LANG_NAMES = {"fr": "Français", "ar": "العربية", "en": "English"}
+
+TR = {
+    "fr": {
+        "app_title": "Gestion des Employés & Paie",
+        "app_sub": "Personnel & bulletins de paie reliés à Excel",
+        # menus
+        "m_file": "Fichier", "m_paie": "Paie", "m_export": "Exporter",
+        "m_view": "Affichage", "m_secu": "Sécurité", "m_params": "Paramètres",
+        "mi_open": "Ouvrir un fichier Excel…", "mi_refresh": "Rafraîchir",
+        "mi_folder": "Ouvrir le dossier", "mi_import": "Importer (CSV)…",
+        "mi_export_csv": "Exporter (CSV)…", "mi_quit": "Quitter",
+        "mi_hours": "Heures (entrée/sortie)…", "mi_pointage": "Pointage…",
+        "mi_year": "Calendrier annuel…", "mi_avances": "Avances…",
+        "mi_conges": "Congés…", "mi_docs": "Documents…",
+        "mi_archive_month": "Archiver le mois", "mi_bulletin": "Bulletin PDF",
+        "mi_all_pdf": "Tous les bulletins PDF", "mi_att_w": "Attestation de travail",
+        "mi_att_s": "Attestation de salaire", "mi_contrat": "Contrat de travail",
+        "mi_etat_html": "État de paie (HTML)", "mi_etat_xls": "État de paie (Excel)",
+        "mi_stats": "Statistiques", "mi_cal": "Calendrier",
+        "mi_sim": "Simulateur de salaire", "mi_registry": "Registre des documents",
+        "mi_archived": "Employés archivés", "mi_audit": "Journal des modifications",
+        "mi_alerts": "Alertes RH", "mi_theme": "Thème clair / sombre",
+        "mi_lang": "Langue", "mi_mdp": "Mot de passe administrateur…",
+        "mi_mdp_c": "Mot de passe comptable…", "mi_about": "À propos",
+        # toolbar
+        "tb_file": "Fichier", "tb_refresh": "Rafraîchir", "tb_pointage": "Pointage",
+        "tb_pdf": "PDF", "tb_allpdf": "Tous PDF", "tb_evo": "Évolution",
+        "tb_alerts": "Alertes",
+        # dashboard
+        "d_eff": "Effectif", "d_brut": "Masse brute", "d_net": "Masse nette",
+        "d_avg": "Net moyen", "d_ir": "Total IR",
+        # list / search
+        "employees": "Employés", "search": "Rechercher…",
+        "all_postes": "Tous postes", "all_contrats": "Tous contrats",
+        "c_id": "ID", "c_nom": "Nom", "c_poste": "Poste", "c_net": "Net",
+        # profile / actions
+        "p_none": "Aucun employé sélectionné", "p_net": "SALAIRE NET",
+        "a_new": "Nouveau", "a_save": "Enregistrer", "a_archive": "Archiver",
+        "a_avances": "Avances", "a_conges": "Congés", "a_docs": "Documents",
+        "a_bulletin": "Bulletin de paie",
+        # groups
+        "g_base": "Informations de base", "g_contact": "Contact",
+        "g_admin": "Administratif", "g_fin": "Salaire & éléments variables",
+        # fields
+        "f_id": "ID", "f_nom": "Nom complet", "f_cin": "CIN", "f_genre": "Genre",
+        "f_poste": "Poste", "f_salaire_base": "Salaire de base",
+        "f_telephone": "Téléphone", "f_email": "Email", "f_adresse": "Adresse",
+        "f_date_naissance": "Date de naissance", "f_date_embauche": "Date d'embauche",
+        "f_type_contrat": "Type de contrat", "f_date_fin_contrat": "Fin de contrat",
+        "f_cnss": "N° CNSS", "f_personnes_charge": "Personnes à charge",
+        "f_primes": "Primes", "f_retenues": "Autres retenues",
+        "f_retenue_avance": "Retenue avance", "f_jours_absence": "Jours d'absence",
+    },
+    "ar": {
+        "app_title": "تسيير الموظفين والأجور",
+        "app_sub": "بطاقات الموظفين وكشوف الأجور مرتبطة بـ Excel",
+        "m_file": "ملف", "m_paie": "الأجور", "m_export": "تصدير",
+        "m_view": "عرض", "m_secu": "الأمان", "m_params": "الإعدادات",
+        "mi_open": "فتح ملف Excel…", "mi_refresh": "تحديث",
+        "mi_folder": "فتح المجلد", "mi_import": "استيراد (CSV)…",
+        "mi_export_csv": "تصدير (CSV)…", "mi_quit": "خروج",
+        "mi_hours": "الساعات (دخول/خروج)…", "mi_pointage": "التحضير…",
+        "mi_year": "التقويم السنوي…", "mi_avances": "السُّلف…",
+        "mi_conges": "الإجازات…", "mi_docs": "الوثائق…",
+        "mi_archive_month": "أرشفة الشهر", "mi_bulletin": "كشف الأجر PDF",
+        "mi_all_pdf": "جميع كشوف الأجور PDF", "mi_att_w": "شهادة عمل",
+        "mi_att_s": "شهادة أجر", "mi_contrat": "عقد العمل",
+        "mi_etat_html": "حالة الأجور (HTML)", "mi_etat_xls": "حالة الأجور (Excel)",
+        "mi_stats": "إحصائيات", "mi_cal": "التقويم",
+        "mi_sim": "محاكي الأجر", "mi_registry": "سجل الوثائق",
+        "mi_archived": "الموظفون المؤرشفون", "mi_audit": "سجل التعديلات",
+        "mi_alerts": "التنبيهات", "mi_theme": "السمة فاتح / داكن",
+        "mi_lang": "اللغة", "mi_mdp": "كلمة سر المدير…",
+        "mi_mdp_c": "كلمة سر المحاسب…", "mi_about": "حول",
+        "tb_file": "ملف", "tb_refresh": "تحديث", "tb_pointage": "التحضير",
+        "tb_pdf": "PDF", "tb_allpdf": "الكل PDF", "tb_evo": "التطور",
+        "tb_alerts": "تنبيهات",
+        "d_eff": "العدد", "d_brut": "الكتلة الإجمالية", "d_net": "الكتلة الصافية",
+        "d_avg": "المعدل الصافي", "d_ir": "مجموع IR",
+        "employees": "الموظفون", "search": "بحث…",
+        "all_postes": "كل المناصب", "all_contrats": "كل العقود",
+        "c_id": "رقم", "c_nom": "الاسم", "c_poste": "المنصب", "c_net": "الصافي",
+        "p_none": "لم يتم اختيار موظف", "p_net": "الأجر الصافي",
+        "a_new": "جديد", "a_save": "حفظ", "a_archive": "أرشفة",
+        "a_avances": "السُّلف", "a_conges": "الإجازات", "a_docs": "الوثائق",
+        "a_bulletin": "كشف الأجر",
+        "g_base": "المعلومات الأساسية", "g_contact": "الاتصال",
+        "g_admin": "إداري", "g_fin": "الأجر والعناصر المتغيرة",
+        "f_id": "رقم", "f_nom": "الاسم الكامل", "f_cin": "البطاقة الوطنية",
+        "f_genre": "الجنس", "f_poste": "المنصب", "f_salaire_base": "الأجر الأساسي",
+        "f_telephone": "الهاتف", "f_email": "البريد الإلكتروني", "f_adresse": "العنوان",
+        "f_date_naissance": "تاريخ الازدياد", "f_date_embauche": "تاريخ التوظيف",
+        "f_type_contrat": "نوع العقد", "f_date_fin_contrat": "نهاية العقد",
+        "f_cnss": "رقم CNSS", "f_personnes_charge": "الأشخاص في الكفالة",
+        "f_primes": "العلاوات", "f_retenues": "اقتطاعات أخرى",
+        "f_retenue_avance": "اقتطاع السلفة", "f_jours_absence": "أيام الغياب",
+    },
+    "en": {
+        "app_title": "Employee & Payroll Management",
+        "app_sub": "Staff records & payslips linked to Excel",
+        "m_file": "File", "m_paie": "Payroll", "m_export": "Export",
+        "m_view": "View", "m_secu": "Security", "m_params": "Settings",
+        "mi_open": "Open an Excel file…", "mi_refresh": "Refresh",
+        "mi_folder": "Open folder", "mi_import": "Import (CSV)…",
+        "mi_export_csv": "Export (CSV)…", "mi_quit": "Quit",
+        "mi_hours": "Hours (in/out)…", "mi_pointage": "Attendance…",
+        "mi_year": "Yearly calendar…", "mi_avances": "Advances…",
+        "mi_conges": "Leaves…", "mi_docs": "Documents…",
+        "mi_archive_month": "Archive month", "mi_bulletin": "Payslip PDF",
+        "mi_all_pdf": "All payslips PDF", "mi_att_w": "Work certificate",
+        "mi_att_s": "Salary certificate", "mi_contrat": "Employment contract",
+        "mi_etat_html": "Payroll report (HTML)", "mi_etat_xls": "Payroll report (Excel)",
+        "mi_stats": "Statistics", "mi_cal": "Calendar",
+        "mi_sim": "Salary simulator", "mi_registry": "Documents registry",
+        "mi_archived": "Archived employees", "mi_audit": "Change log",
+        "mi_alerts": "HR alerts", "mi_theme": "Light / dark theme",
+        "mi_lang": "Language", "mi_mdp": "Administrator password…",
+        "mi_mdp_c": "Accountant password…", "mi_about": "About",
+        "tb_file": "File", "tb_refresh": "Refresh", "tb_pointage": "Attendance",
+        "tb_pdf": "PDF", "tb_allpdf": "All PDF", "tb_evo": "Trend",
+        "tb_alerts": "Alerts",
+        "d_eff": "Headcount", "d_brut": "Gross total", "d_net": "Net total",
+        "d_avg": "Avg net", "d_ir": "Total IR",
+        "employees": "Employees", "search": "Search…",
+        "all_postes": "All positions", "all_contrats": "All contracts",
+        "c_id": "ID", "c_nom": "Name", "c_poste": "Position", "c_net": "Net",
+        "p_none": "No employee selected", "p_net": "NET SALARY",
+        "a_new": "New", "a_save": "Save", "a_archive": "Archive",
+        "a_avances": "Advances", "a_conges": "Leaves", "a_docs": "Documents",
+        "a_bulletin": "Payslip",
+        "g_base": "Basic information", "g_contact": "Contact",
+        "g_admin": "Administrative", "g_fin": "Salary & variable items",
+        "f_id": "ID", "f_nom": "Full name", "f_cin": "ID card", "f_genre": "Gender",
+        "f_poste": "Position", "f_salaire_base": "Base salary",
+        "f_telephone": "Phone", "f_email": "Email", "f_adresse": "Address",
+        "f_date_naissance": "Date of birth", "f_date_embauche": "Hire date",
+        "f_type_contrat": "Contract type", "f_date_fin_contrat": "Contract end",
+        "f_cnss": "CNSS no.", "f_personnes_charge": "Dependents",
+        "f_primes": "Bonuses", "f_retenues": "Other deductions",
+        "f_retenue_avance": "Advance deduction", "f_jours_absence": "Absence days",
+    },
+}
+
+
+def t(key, default=None):
+    d = TR.get(LANG) or TR["fr"]
+    return d.get(key) or TR["fr"].get(key) or (default if default is not None else key)
 
 
 def to_float(value) -> float:
@@ -716,6 +867,7 @@ class EmployeeApp(tb.Window):
             child.destroy()
         self.vars = {}
         self.detail = {}
+        self.title(t("app_title"))
         self._build_style()
         self._build_menubar()
         self._build_header()
@@ -897,9 +1049,9 @@ class EmployeeApp(tb.Window):
 
         left = tk.Frame(bar, bg=COL["brand"])
         left.pack(side=tk.LEFT, padx=18)
-        tk.Label(left, text="👥  Gestion des Employés & Paie", bg=COL["brand"],
+        tk.Label(left, text="👥  " + t("app_title"), bg=COL["brand"],
                  fg="white", font=(FONT, 16, "bold")).pack(anchor=tk.W, pady=(10, 0))
-        tk.Label(left, text="Fiches du personnel & bulletins de paie reliés à Excel",
+        tk.Label(left, text=t("app_sub"),
                  bg=COL["brand"], fg="#a7d7bd", font=(FONT, 9)).pack(anchor=tk.W)
 
         right = tk.Frame(bar, bg=COL["brand"])
@@ -915,87 +1067,94 @@ class EmployeeApp(tb.Window):
         menubar = tk.Menu(self)
 
         m_file = tk.Menu(menubar, tearoff=0)
-        m_file.add_command(label="📂  Ouvrir un fichier Excel…",
-                           command=self.choose_file)
-        m_file.add_command(label="🔄  Rafraîchir", command=self.reload)
-        m_file.add_command(label="📁  Ouvrir le dossier", command=self.open_folder)
+        m_file.add_command(label="📂  " + t("mi_open"), command=self.choose_file)
+        m_file.add_command(label="🔄  " + t("mi_refresh"), command=self.reload)
+        m_file.add_command(label="📁  " + t("mi_folder"), command=self.open_folder)
         m_file.add_separator()
-        m_file.add_command(label="📥  Importer des employés (CSV)…",
-                           command=self.import_csv)
-        m_file.add_command(label="📤  Exporter les employés (CSV)…",
-                           command=self.export_csv)
+        m_file.add_command(label="📥  " + t("mi_import"), command=self.import_csv)
+        m_file.add_command(label="📤  " + t("mi_export_csv"), command=self.export_csv)
         m_file.add_separator()
-        m_file.add_command(label="Quitter", command=self.destroy)
-        menubar.add_cascade(label="Fichier", menu=m_file)
+        m_file.add_command(label=t("mi_quit"), command=self.destroy)
+        menubar.add_cascade(label=t("m_file"), menu=m_file)
 
         m_paie = tk.Menu(menubar, tearoff=0)
-        m_paie.add_command(label="📅  Pointage…", command=self.open_pointage)
-        m_paie.add_command(label="🗓  Calendrier annuel…",
+        m_paie.add_command(label="📅  " + t("mi_pointage"),
+                           command=self.open_pointage)
+        m_paie.add_command(label="🗓  " + t("mi_year"),
                            command=self.open_year_pointage)
-        m_paie.add_command(label="🕐  Heures (entrée/sortie)…",
-                           command=self.open_hours)
-        m_paie.add_command(label="💳  Avances…", command=self.open_advances)
-        m_paie.add_command(label="🏖  Congés…", command=self.open_leaves)
-        m_paie.add_command(label="📎  Documents…", command=self.open_documents)
-        m_paie.add_command(label="📦  Archiver le mois", command=self.archive_month)
+        m_paie.add_command(label="🕐  " + t("mi_hours"), command=self.open_hours)
+        m_paie.add_command(label="💳  " + t("mi_avances"),
+                           command=self.open_advances)
+        m_paie.add_command(label="🏖  " + t("mi_conges"), command=self.open_leaves)
+        m_paie.add_command(label="📎  " + t("mi_docs"), command=self.open_documents)
+        m_paie.add_command(label="📦  " + t("mi_archive_month"),
+                           command=self.archive_month)
         m_paie.add_separator()
-        m_paie.add_command(label="🧾  Bulletin PDF (employé)",
-                           command=self.export_pdf)
-        m_paie.add_command(label="📚  Tous les bulletins PDF",
+        m_paie.add_command(label="🧾  " + t("mi_bulletin"), command=self.export_pdf)
+        m_paie.add_command(label="📚  " + t("mi_all_pdf"),
                            command=self.export_all_pdf)
         m_paie.add_separator()
-        m_paie.add_command(label="📋  Attestation de travail",
+        m_paie.add_command(label="📋  " + t("mi_att_w"),
                            command=lambda: self.generate_attestation("travail"))
-        m_paie.add_command(label="📋  Attestation de salaire",
+        m_paie.add_command(label="📋  " + t("mi_att_s"),
                            command=lambda: self.generate_attestation("salaire"))
-        m_paie.add_command(label="📝  Contrat de travail",
+        m_paie.add_command(label="📝  " + t("mi_contrat"),
                            command=self.generate_contract)
-        menubar.add_cascade(label="Paie", menu=m_paie)
+        menubar.add_cascade(label=t("m_paie"), menu=m_paie)
 
         m_exp = tk.Menu(menubar, tearoff=0)
-        m_exp.add_command(label="📊  État de paie (HTML)",
+        m_exp.add_command(label="📊  " + t("mi_etat_html"),
                           command=self.export_etat_paie)
-        m_exp.add_command(label="📑  État de paie (Excel)",
+        m_exp.add_command(label="📑  " + t("mi_etat_xls"),
                           command=self.export_etat_excel)
         m_exp.add_command(label="🧾  Déclaration CNSS (Excel)",
                           command=self.export_cnss)
-        menubar.add_cascade(label="Exporter", menu=m_exp)
+        menubar.add_cascade(label=t("m_export"), menu=m_exp)
 
         m_view = tk.Menu(menubar, tearoff=0)
-        m_view.add_command(label="📈  Graphique des salaires",
-                           command=self.open_graph)
-        m_view.add_command(label="📉  Évolution mensuelle",
-                           command=self.open_evolution)
-        m_view.add_command(label="📊  Statistiques", command=self.open_stats)
-        m_view.add_command(label="📆  Calendrier", command=self.open_calendar)
-        m_view.add_command(label="🧮  Simulateur de salaire",
-                           command=self.open_simulateur)
-        m_view.add_command(label="🗂  Registre des documents",
+        m_view.add_command(label="📈  Graphique", command=self.open_graph)
+        m_view.add_command(label="📉  " + t("tb_evo"), command=self.open_evolution)
+        m_view.add_command(label="📊  " + t("mi_stats"), command=self.open_stats)
+        m_view.add_command(label="📆  " + t("mi_cal"), command=self.open_calendar)
+        m_view.add_command(label="🧮  " + t("mi_sim"), command=self.open_simulateur)
+        m_view.add_command(label="🗂  " + t("mi_registry"),
                            command=self.open_registry)
-        m_view.add_command(label="🗄  Employés archivés",
+        m_view.add_command(label="🗄  " + t("mi_archived"),
                            command=self.open_archived)
-        m_view.add_command(label="📝  Journal des modifications",
-                           command=self.open_audit)
-        m_view.add_command(label="🔔  Alertes RH", command=self.open_alerts)
+        m_view.add_command(label="📝  " + t("mi_audit"), command=self.open_audit)
+        m_view.add_command(label="🔔  " + t("mi_alerts"), command=self.open_alerts)
         m_view.add_separator()
-        theme_lbl = "☀️  Thème clair" if self.theme == "dark" else "🌙  Thème sombre"
-        m_view.add_command(label=theme_lbl, command=self.toggle_theme)
-        menubar.add_cascade(label="Affichage", menu=m_view)
+        m_view.add_command(label="🌗  " + t("mi_theme"), command=self.toggle_theme)
+        m_lang = tk.Menu(m_view, tearoff=0)
+        for code, name in LANG_NAMES.items():
+            mark = "● " if code == LANG else "   "
+            m_lang.add_command(label=mark + name,
+                               command=lambda c=code: self.change_lang(c))
+        m_view.add_cascade(label="🌐  " + t("mi_lang"), menu=m_lang)
+        menubar.add_cascade(label=t("m_view"), menu=m_view)
 
         m_sec = tk.Menu(menubar, tearoff=0)
-        m_sec.add_command(label="🔐  Mot de passe administrateur…",
-                          command=self.manage_password)
-        m_sec.add_command(label="👤  Mot de passe comptable…",
+        m_sec.add_command(label="🔐  " + t("mi_mdp"), command=self.manage_password)
+        m_sec.add_command(label="👤  " + t("mi_mdp_c"),
                           command=self.manage_password_comptable)
-        menubar.add_cascade(label="Sécurité", menu=m_sec)
+        menubar.add_cascade(label=t("m_secu"), menu=m_sec)
 
-        menubar.add_command(label="⚙️ Paramètres", command=self.open_settings)
+        menubar.add_command(label="⚙️ " + t("m_params"), command=self.open_settings)
 
         m_help = tk.Menu(menubar, tearoff=0)
-        m_help.add_command(label="À propos", command=self._about)
+        m_help.add_command(label=t("mi_about"), command=self._about)
         menubar.add_cascade(label="?", menu=m_help)
 
         self.config(menu=menubar)
+
+    def change_lang(self, code):
+        if code not in TR:
+            return
+        self.config_data["lang"] = code
+        save_config(self.config_data)
+        apply_config_settings(self.config_data)
+        self._rebuild_all()
+        self.toast(LANG_NAMES.get(code, code))
 
     def _about(self):
         messagebox.showinfo(
@@ -1213,12 +1372,12 @@ class EmployeeApp(tb.Window):
         bar.pack(side=tk.TOP, fill=tk.X)
         bar.pack_propagate(False)
 
-        quick = [("📂  Fichier", self.choose_file, "Ouvrir un fichier Excel"),
-                 ("🔄  Rafraîchir", self.reload, "Recharger les données"),
-                 ("📅  Pointage", self.open_pointage, "Pointage mensuel"),
-                 ("🧾  PDF", self.export_pdf, "Bulletin de paie PDF (Ctrl+P)"),
-                 ("📚  Tous PDF", self.export_all_pdf, "Tous les bulletins PDF"),
-                 ("📉  Évolution", self.open_evolution, "Évolution de la masse salariale")]
+        quick = [("📂  " + t("tb_file"), self.choose_file, t("mi_open")),
+                 ("🔄  " + t("tb_refresh"), self.reload, t("mi_refresh")),
+                 ("📅  " + t("tb_pointage"), self.open_pointage, t("mi_pointage")),
+                 ("🧾  " + t("tb_pdf"), self.export_pdf, t("mi_bulletin")),
+                 ("📚  " + t("tb_allpdf"), self.export_all_pdf, t("mi_all_pdf")),
+                 ("📉  " + t("tb_evo"), self.open_evolution, t("tb_evo"))]
         first = True
         for label, cmd, tip in quick:
             b = tb.Button(bar, text=label, bootstyle="light", command=cmd)
@@ -1231,15 +1390,15 @@ class EmployeeApp(tb.Window):
         bt = tb.Button(bar, text=theme_icon, bootstyle="light",
                        command=self.toggle_theme)
         bt.pack(side=tk.RIGHT, padx=4, pady=8)
-        self._tip(bt, "Thème clair / sombre")
+        self._tip(bt, t("mi_theme"))
         bp = tb.Button(bar, text="🔐", bootstyle="light",
                        command=self.manage_password)
         bp.pack(side=tk.RIGHT, padx=4, pady=8)
-        self._tip(bp, "Mot de passe administrateur")
-        self.alert_btn = tb.Button(bar, text="🔔  Alertes", bootstyle="warning",
-                                    command=self.open_alerts)
+        self._tip(bp, t("mi_mdp"))
+        self.alert_btn = tb.Button(bar, text="🔔  " + t("tb_alerts"),
+                                   bootstyle="warning", command=self.open_alerts)
         self.alert_btn.pack(side=tk.RIGHT, padx=4, pady=8)
-        self._tip(self.alert_btn, "Alertes RH (anniversaires, fins de contrat)")
+        self._tip(self.alert_btn, t("mi_alerts"))
 
     def _tip(self, widget, text):
         if HAS_TB_EXTRAS:
@@ -1260,11 +1419,11 @@ class EmployeeApp(tb.Window):
         self.stat_ir = tk.StringVar(value="0,00 DH")
 
         chips = [
-            ("👥", "Effectif", self.stat_effectif, COL["info"]),
-            ("💰", "Masse brute", self.stat_brut, COL["brand2"]),
-            ("💵", "Masse nette", self.stat_masse, COL["accent"]),
-            ("📊", "Net moyen", self.stat_moyen, COL["brand2"]),
-            ("🧾", "Total IR", self.stat_ir, COL["danger"]),
+            ("👥", t("d_eff"), self.stat_effectif, COL["info"]),
+            ("💰", t("d_brut"), self.stat_brut, COL["brand2"]),
+            ("💵", t("d_net"), self.stat_masse, COL["accent"]),
+            ("📊", t("d_avg"), self.stat_moyen, COL["brand2"]),
+            ("🧾", t("d_ir"), self.stat_ir, COL["danger"]),
         ]
         for icon, title, var, color in chips:
             chip = tk.Frame(row, bg=COL["surface"], highlightbackground=COL["border"],
@@ -1317,7 +1476,7 @@ class EmployeeApp(tb.Window):
 
         head = tk.Frame(card, bg=COL["surface"])
         head.pack(fill=tk.X, padx=12, pady=(12, 6))
-        self.count_var = tk.StringVar(value="Employés")
+        self.count_var = tk.StringVar(value=t("employees"))
         tk.Label(head, textvariable=self.count_var, bg=COL["surface"],
                  fg=COL["text"], font=(FONT, 12, "bold")).pack(side=tk.LEFT)
 
@@ -1334,15 +1493,15 @@ class EmployeeApp(tb.Window):
 
         filt = tk.Frame(card, bg=COL["surface"])
         filt.pack(fill=tk.X, padx=12, pady=(0, 8))
-        self.filter_poste = tk.StringVar(value="Tous postes")
-        self.filter_contrat = tk.StringVar(value="Tous contrats")
+        self.filter_poste = tk.StringVar(value=t("all_postes"))
+        self.filter_contrat = tk.StringVar(value=t("all_contrats"))
         self.poste_combo = ttk.Combobox(
             filt, textvariable=self.filter_poste, state="readonly",
-            values=["Tous postes"], font=(FONT, 9))
+            values=[t("all_postes")], font=(FONT, 9))
         self.poste_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
         contrat_combo = ttk.Combobox(
             filt, textvariable=self.filter_contrat, state="readonly",
-            values=["Tous contrats"] + CONTRAT_OPTIONS, font=(FONT, 9), width=12)
+            values=[t("all_contrats")] + CONTRAT_OPTIONS, font=(FONT, 9), width=12)
         contrat_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.filter_poste.trace_add("write", lambda *_: self.refresh_tree())
         self.filter_contrat.trace_add("write", lambda *_: self.refresh_tree())
@@ -1353,10 +1512,10 @@ class EmployeeApp(tb.Window):
         self.tree = ttk.Treeview(wrap, columns=cols, show="headings",
                                  selectmode="browse")
         for col, label, width, anchor in (
-            ("id", "ID", 42, tk.CENTER),
-            ("nom", "Nom", 150, tk.W),
-            ("poste", "Poste", 95, tk.W),
-            ("salaire_net", "Net", 90, tk.E),
+            ("id", t("c_id"), 42, tk.CENTER),
+            ("nom", t("c_nom"), 150, tk.W),
+            ("poste", t("c_poste"), 95, tk.W),
+            ("salaire_net", t("c_net"), 90, tk.E),
         ):
             self.tree.heading(col, text=label)
             self.tree.column(col, width=width, anchor=anchor)
@@ -1395,7 +1554,7 @@ class EmployeeApp(tb.Window):
         info = tk.Frame(inner, bg=COL["surface"])
         info.pack(side=tk.LEFT, padx=14)
         self.name_var = tk.StringVar(value="—")
-        self.poste_var = tk.StringVar(value="Aucun employé sélectionné")
+        self.poste_var = tk.StringVar(value=t("p_none"))
         tk.Label(info, textvariable=self.name_var, bg=COL["surface"],
                  fg=COL["text"], font=(FONT, 16, "bold")).pack(anchor=tk.W)
         tk.Label(info, textvariable=self.poste_var, bg=COL["surface"],
@@ -1404,7 +1563,7 @@ class EmployeeApp(tb.Window):
         badge = tk.Frame(inner, bg=COL["net_bg"], highlightbackground=COL["accent"],
                          highlightthickness=1)
         badge.pack(side=tk.RIGHT)
-        tk.Label(badge, text="SALAIRE NET", bg=COL["net_bg"], fg=COL["brand2"],
+        tk.Label(badge, text=t("p_net"), bg=COL["net_bg"], fg=COL["brand2"],
                  font=(FONT, 8, "bold")).pack(anchor=tk.E, padx=14, pady=(8, 0))
         self.net_var = tk.StringVar(value="—")
         tk.Label(badge, textvariable=self.net_var, bg=COL["net_bg"],
@@ -1487,14 +1646,15 @@ class EmployeeApp(tb.Window):
 
     def _build_form_fields(self, parent):
         for gkey, (gtitle, icon) in GROUPS.items():
-            body = self._card(parent, gtitle, icon)
+            body = self._card(parent, t("g_" + gkey, gtitle), icon)
             body.columnconfigure(1, weight=1)
             body.columnconfigure(3, weight=1)
             cells = [(k, l, kind) for k, l, g, kind in FIELDS if g == gkey]
             for i, (key, label, kind) in enumerate(cells):
                 r, c = divmod(i, 2)
                 col = c * 2
-                tk.Label(body, text=label, bg=COL["surface"], fg=COL["muted"],
+                tk.Label(body, text=t("f_" + key, label), bg=COL["surface"],
+                         fg=COL["muted"],
                          font=(FONT, 9)).grid(row=r * 2, column=col, columnspan=2,
                                               sticky=tk.W, padx=(4, 8), pady=(4, 0))
                 var = tk.StringVar()
@@ -1597,19 +1757,19 @@ class EmployeeApp(tb.Window):
     def _build_actions(self, parent):
         bar = tk.Frame(parent, bg=COL["bg"])
         bar.pack(fill=tk.X, pady=(10, 0))
-        tb.Button(bar, text="🆕  Nouveau", bootstyle="info",
+        tb.Button(bar, text="🆕  " + t("a_new"), bootstyle="info",
                    command=self.new_record).pack(side=tk.LEFT)
-        tb.Button(bar, text="💾  Enregistrer", bootstyle="success",
+        tb.Button(bar, text="💾  " + t("a_save"), bootstyle="success",
                    command=self.save_record).pack(side=tk.LEFT, padx=8)
-        tb.Button(bar, text="🗄  Archiver", bootstyle="warning",
+        tb.Button(bar, text="🗄  " + t("a_archive"), bootstyle="warning",
                    command=self.archive_record).pack(side=tk.LEFT)
-        tb.Button(bar, text="🖨  Bulletin de paie", bootstyle="secondary-outline",
+        tb.Button(bar, text="🖨  " + t("a_bulletin"), bootstyle="secondary-outline",
                    command=self.export_fiche).pack(side=tk.RIGHT)
-        tb.Button(bar, text="📎  Documents", bootstyle="secondary-outline",
+        tb.Button(bar, text="📎  " + t("a_docs"), bootstyle="secondary-outline",
                    command=self.open_documents).pack(side=tk.RIGHT, padx=8)
-        tb.Button(bar, text="💳  Avances", bootstyle="secondary-outline",
+        tb.Button(bar, text="💳  " + t("a_avances"), bootstyle="secondary-outline",
                    command=self.open_advances).pack(side=tk.RIGHT)
-        tb.Button(bar, text="🏖  Congés", bootstyle="secondary-outline",
+        tb.Button(bar, text="🏖  " + t("a_conges"), bootstyle="secondary-outline",
                    command=self.open_leaves).pack(side=tk.RIGHT, padx=6)
 
     def _build_statusbar(self):
@@ -1662,16 +1822,17 @@ class EmployeeApp(tb.Window):
             return
         postes = sorted({str(r.get("poste", "")).strip()
                          for r in self.records if str(r.get("poste", "")).strip()})
-        self.poste_combo["values"] = ["Tous postes"] + postes
+        self.poste_combo["values"] = [t("all_postes")] + postes
         if self.filter_poste.get() not in self.poste_combo["values"]:
-            self.filter_poste.set("Tous postes")
+            self.filter_poste.set(t("all_postes"))
 
     def refresh_tree(self):
         query = self.search_var.get().strip().lower()
         f_poste = getattr(self, "filter_poste", None)
         f_contrat = getattr(self, "filter_contrat", None)
-        f_poste = f_poste.get() if f_poste else "Tous postes"
-        f_contrat = f_contrat.get() if f_contrat else "Tous contrats"
+        all_p, all_c = t("all_postes"), t("all_contrats")
+        f_poste = f_poste.get() if f_poste else all_p
+        f_contrat = f_contrat.get() if f_contrat else all_c
         self.tree.delete(*self.tree.get_children())
         shown = 0
         for idx, rec in enumerate(self.records):
@@ -1682,10 +1843,10 @@ class EmployeeApp(tb.Window):
                                  "email")).lower()
             if query and query not in haystack:
                 continue
-            if f_poste != "Tous postes" and \
+            if f_poste != all_p and \
                     str(rec.get("poste", "")).strip() != f_poste:
                 continue
-            if f_contrat != "Tous contrats" and \
+            if f_contrat != all_c and \
                     str(rec.get("type_contrat", "")).strip() != f_contrat:
                 continue
             net = compute_payroll(rec)["net"]
@@ -1694,7 +1855,7 @@ class EmployeeApp(tb.Window):
                 rec.get("id", ""), rec.get("nom", ""),
                 rec.get("poste", ""), fmt_money(net)))
             shown += 1
-        self.count_var.set(f"Employés ({shown})")
+        self.count_var.set(f"{t('employees')} ({shown})")
 
     def on_select(self, _event=None):
         sel = self.tree.selection()
@@ -1731,7 +1892,7 @@ class EmployeeApp(tb.Window):
         has_data = bool(rec.get("nom") or rec.get("salaire_base"))
         self.name_var.set(rec.get("nom") or "—")
         self.poste_var.set(rec.get("poste") or
-                           ("—" if has_data else "Aucun employé sélectionné"))
+                           ("—" if has_data else t("p_none")))
         self.net_var.set(fmt_money(p["net"]) if has_data else "—")
         self.render_avatar(rec.get("nom") or "")
 
@@ -2467,7 +2628,8 @@ class EmployeeApp(tb.Window):
         if not hasattr(self, "alert_btn"):
             return
         n = len(self.compute_alerts())
-        self.alert_btn.config(text=f"🔔  Alertes ({n})" if n else "🔔  Alertes")
+        base = "🔔  " + t("tb_alerts")
+        self.alert_btn.config(text=f"{base} ({n})" if n else base)
 
     def open_alerts(self):
         alerts = self.compute_alerts()
