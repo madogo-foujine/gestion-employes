@@ -29,7 +29,7 @@ except Exception:  # noqa: BLE001
 
 THEME_LIGHT = "flatly"
 THEME_DARK = "darkly"
-APP_VERSION = "1.1"
+APP_VERSION = "1.2"
 
 try:
     from openpyxl import Workbook, load_workbook
