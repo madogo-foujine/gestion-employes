@@ -9,6 +9,7 @@ import logging
 import os
 import secrets
 import shutil
+import sys
 import webbrowser
 from pathlib import Path
 
@@ -870,6 +871,7 @@ class EmployeeApp(tb.Window):
         self.title(APP_TITLE)
         self.geometry("1200x800")
         self.minsize(1000, 640)
+        self._set_window_icon()
 
         self.config_data = cfg
         apply_config_settings(self.config_data)
@@ -4213,6 +4215,20 @@ class EmployeeApp(tb.Window):
         self.bind("<Control-s>", lambda e: self.save_record())
         self.bind("<Control-f>", lambda e: self._focus_search())
         self.bind("<Control-p>", lambda e: self.export_pdf())
+
+    def _set_window_icon(self):
+        candidates = []
+        if getattr(sys, "frozen", False):
+            candidates.append(os.path.join(getattr(sys, "_MEIPASS", ""), "icon.ico"))
+        candidates.append(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "icon.ico"))
+        for path in candidates:
+            if path and os.path.exists(path):
+                try:
+                    self.iconbitmap(path)
+                    return
+                except tk.TclError:
+                    pass
 
     def _first_run_setup(self):
         """Assistant de première utilisation : société, langue, logo."""

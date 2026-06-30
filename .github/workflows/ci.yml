@@ -37,7 +37,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
       - name: Build executable
-        run: pyinstaller --onefile --windowed --name GestionEmployes --icon icon.ico --collect-all ttkbootstrap employee_manager.py
+        run: pyinstaller --onefile --windowed --name GestionEmployes --icon icon.ico --add-data "icon.ico;." --collect-all ttkbootstrap employee_manager.py
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4
         with:
