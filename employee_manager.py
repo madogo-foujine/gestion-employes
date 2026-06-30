@@ -564,6 +564,49 @@ class AuditStore:
             log.exception("Echec de l'ecriture du journal d'audit")
 
 
+LEAVE_TYPES = ["Annuel", "Maladie", "Sans solde"]
+LEAVE_STATUS = ["En attente", "Approuvé", "Refusé"]
+
+
+class LeaveStore:
+    def __init__(self, excel_path: Path):
+        self.path = Path(excel_path).parent / "leaves.json"
+
+    def _load(self) -> dict:
+        try:
+            return json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _save(self, data: dict):
+        try:
+            self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+        except OSError:
+            log.exception("Echec de l'ecriture des conges")
+
+    def list(self, emp_id) -> list:
+        return self._load().get(str(emp_id), [])
+
+    def set_all(self, emp_id, requests: list):
+        data = self._load()
+        data[str(emp_id)] = requests
+        self._save(data)
+
+    def add(self, emp_id, typ: str, start: str, end: str, days: int):
+        reqs = self.list(emp_id)
+        reqs.append({
+            "type": typ, "start": start, "end": end, "days": days,
+            "status": "En attente",
+            "demande": dt.date.today().isoformat(),
+        })
+        self.set_all(emp_id, reqs)
+
+    def approved_annual_days(self, emp_id) -> int:
+        return sum(int(r.get("days", 0)) for r in self.list(emp_id)
+                   if r.get("type") == "Annuel" and r.get("status") == "Approuvé")
+
+
 class EmployeeApp(tb.Window):
     def __init__(self):
         cfg = load_config()
@@ -588,6 +631,7 @@ class EmployeeApp(tb.Window):
         self.history = HistoryStore(DEFAULT_FILE)
         self.advances = AdvancesStore(DEFAULT_FILE)
         self.audit = AuditStore(DEFAULT_FILE)
+        self.leaves = LeaveStore(DEFAULT_FILE)
         self.records: list[dict] = []
         self.vars: dict[str, tk.StringVar] = {}
         self.detail: dict[str, tk.StringVar] = {}
@@ -826,6 +870,7 @@ class EmployeeApp(tb.Window):
         m_paie.add_command(label="🗓  Calendrier annuel…",
                            command=self.open_year_pointage)
         m_paie.add_command(label="💳  Avances…", command=self.open_advances)
+        m_paie.add_command(label="🏖  Congés…", command=self.open_leaves)
         m_paie.add_command(label="📎  Documents…", command=self.open_documents)
         m_paie.add_command(label="📦  Archiver le mois", command=self.archive_month)
         m_paie.add_separator()
@@ -1496,6 +1541,8 @@ class EmployeeApp(tb.Window):
                    command=self.open_documents).pack(side=tk.RIGHT, padx=8)
         tb.Button(bar, text="💳  Avances", bootstyle="secondary-outline",
                    command=self.open_advances).pack(side=tk.RIGHT)
+        tb.Button(bar, text="🏖  Congés", bootstyle="secondary-outline",
+                   command=self.open_leaves).pack(side=tk.RIGHT, padx=6)
 
     def _build_statusbar(self):
         self.status_var = tk.StringVar()
@@ -1523,6 +1570,7 @@ class EmployeeApp(tb.Window):
         self.history = HistoryStore(Path(path))
         self.advances = AdvancesStore(Path(path))
         self.audit = AuditStore(Path(path))
+        self.leaves = LeaveStore(Path(path))
         self.reload()
 
     def reload(self):
@@ -2295,7 +2343,12 @@ class EmployeeApp(tb.Window):
         else:
             months = 0
         acquis = round(months * LEAVE_PER_MONTH, 1)
-        pris = self.pointage.count_status(rec.get("id"), "C") if rec.get("id") else 0
+        emp_id = rec.get("id")
+        pris = 0
+        if emp_id:
+            pris = self.pointage.count_status(emp_id, "C")
+            if hasattr(self, "leaves"):
+                pris += self.leaves.approved_annual_days(emp_id)
         return acquis, pris, round(acquis - pris, 1)
 
 
@@ -2955,6 +3008,98 @@ class EmployeeApp(tb.Window):
                    command=win.destroy).pack(side=tk.RIGHT)
         refresh()
 
+    def open_leaves(self):
+        if self.current_index is None:
+            messagebox.showinfo("اختار خدام", "اختار شي خدام الأول.")
+            return
+        rec = self.records[self.current_index]
+        emp_id = rec.get("id")
+
+        win = tk.Toplevel(self)
+        win.title(f"Congés — {rec.get('nom', '')}")
+        win.configure(bg=COL["surface"])
+        win.geometry("640x520")
+        tk.Label(win, text=f"🏖  Congés — {rec.get('nom', '')}", bg=COL["surface"],
+                 fg=COL["brand"], font=(FONT, 13, "bold")).pack(
+                     anchor=tk.W, padx=16, pady=(14, 2))
+        bal_lbl = tk.Label(win, bg=COL["surface"], fg=COL["brand2"],
+                           font=(FONT, 11, "bold"))
+        bal_lbl.pack(anchor=tk.W, padx=16)
+
+        cols = ("type", "start", "end", "days", "status")
+        tree = ttk.Treeview(win, columns=cols, show="headings", height=9)
+        for c, lab, w in (("type", "Type", 100), ("start", "Du", 110),
+                          ("end", "Au", 110), ("days", "Jours", 60),
+                          ("status", "Statut", 110)):
+            tree.heading(c, text=lab)
+            tree.column(c, width=w, anchor=tk.W)
+        tree.pack(fill=tk.BOTH, expand=True, padx=16, pady=8)
+
+        def refresh():
+            tree.delete(*tree.get_children())
+            for i, r in enumerate(self.leaves.list(emp_id)):
+                tree.insert("", tk.END, iid=str(i), values=(
+                    r.get("type", ""), r.get("start", ""), r.get("end", ""),
+                    r.get("days", ""), r.get("status", "")))
+            acq, pris, solde = self._conges(rec)
+            bal_lbl.config(text=f"Solde : acquis {acq} j  •  pris {pris} j  "
+                                f"•  restant {solde} j")
+
+        form = tk.Frame(win, bg=COL["surface"])
+        form.pack(fill=tk.X, padx=16, pady=(0, 4))
+        v_type = tk.StringVar(value="Annuel")
+        v_start = tk.StringVar()
+        v_end = tk.StringVar()
+        ttk.Combobox(form, textvariable=v_type, values=LEAVE_TYPES,
+                     state="readonly", width=10).grid(row=0, column=0, padx=2)
+        tk.Label(form, text="Du", bg=COL["surface"], fg=COL["muted"],
+                 font=(FONT, 9)).grid(row=0, column=1, padx=(6, 2))
+        ttk.Entry(form, textvariable=v_start, width=12).grid(row=0, column=2, padx=2)
+        tk.Label(form, text="Au", bg=COL["surface"], fg=COL["muted"],
+                 font=(FONT, 9)).grid(row=0, column=3, padx=(6, 2))
+        ttk.Entry(form, textvariable=v_end, width=12).grid(row=0, column=4, padx=2)
+
+        def add_req():
+            d1, d2 = parse_date(v_start.get()), parse_date(v_end.get())
+            if not d1 or not d2 or d2 < d1:
+                messagebox.showwarning(
+                    "Dates", "Dates invalides (AAAA-MM-JJ, fin ≥ début).",
+                    parent=win)
+                return
+            days = (d2 - d1).days + 1
+            self.leaves.add(emp_id, v_type.get(), d1.isoformat(),
+                            d2.isoformat(), days)
+            self.audit.log(getattr(self, "role", "admin"), "Demande congé",
+                           f"{rec.get('nom')} {v_type.get()} {days}j")
+            v_start.set(""); v_end.set("")
+            refresh()
+
+        tb.Button(form, text="➕  Demander", bootstyle="info",
+                  command=add_req).grid(row=0, column=5, padx=8)
+
+        def set_status(new):
+            sel = tree.selection()
+            if not sel:
+                return
+            reqs = self.leaves.list(emp_id)
+            idx = int(sel[0])
+            reqs[idx]["status"] = new
+            self.leaves.set_all(emp_id, reqs)
+            self.audit.log(getattr(self, "role", "admin"), f"Congé {new}",
+                           f"{rec.get('nom')} {reqs[idx].get('type')} "
+                           f"{reqs[idx].get('days')}j")
+            refresh()
+            self.update_calc()
+
+        bb = tk.Frame(win, bg=COL["surface"])
+        bb.pack(fill=tk.X, padx=16, pady=(0, 14))
+        tb.Button(bb, text="✓  Approuver", bootstyle="success",
+                  command=lambda: set_status("Approuvé")).pack(side=tk.LEFT)
+        tb.Button(bb, text="✗  Refuser", bootstyle="danger",
+                  command=lambda: set_status("Refusé")).pack(side=tk.LEFT, padx=6)
+        tb.Button(bb, text="Fermer", bootstyle="secondary-outline",
+                  command=win.destroy).pack(side=tk.RIGHT)
+        refresh()
 
     def open_documents(self):
         if self.current_index is None:
