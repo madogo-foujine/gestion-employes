@@ -53,6 +53,20 @@ try:
 except ImportError:
     HAS_FPDF = False
 
+if HAS_FPDF:
+    class ReportPDF(FPDF):
+        def footer(self):
+            self.set_y(-14)
+            try:
+                self.set_font(getattr(self, "_uni", "helvetica"), "", 8)
+            except Exception:  # noqa: BLE001
+                self.set_font("helvetica", "", 8)
+            self.set_text_color(150, 150, 150)
+            txt = f"Page {self.page_no()} / {{nb}}"
+            if getattr(self, "_gen", ""):
+                txt += "    " + self._gen
+            self.cell(0, 8, txt, align="C")
+
 
 APP_TITLE = "Gestion des Employés & Paie — تسيير الخدامة والأجور"
 COMPANY_NAME = "Ma Société"
@@ -1167,6 +1181,8 @@ class EmployeeApp(tb.Window):
         menubar.add_cascade(label=t("m_paie"), menu=m_paie)
 
         m_exp = tk.Menu(menubar, tearoff=0)
+        m_exp.add_command(label="📄  État de paie (PDF)",
+                          command=self.export_etat_pdf)
         m_exp.add_command(label="📊  " + t("mi_etat_html"),
                           command=self.export_etat_paie)
         m_exp.add_command(label="📑  " + t("mi_etat_xls"),
@@ -2368,6 +2384,111 @@ class EmployeeApp(tb.Window):
   <div class="foot">Édité le {dt.date.today().isoformat()} — {COMPANY_NAME}</div>
 </body></html>"""
 
+
+    def export_etat_pdf(self):
+        if not HAS_FPDF:
+            messagebox.showinfo("fpdf2", "ثبت:  pip install fpdf2")
+            return
+        active = [r for r in self.records if not str(r.get("archive", "")).strip()]
+        if not active:
+            messagebox.showinfo("فارغ", "ماكاين حتى خدام.")
+            return
+        mois = f"{dt.date.today():%m/%Y}"
+        brand = (15, 61, 46)
+        brand2 = (21, 128, 61)
+
+        pdf = ReportPDF(format="A4")
+        pdf.set_auto_page_break(False)
+        font = self._setup_pdf_font(pdf)
+        pdf._uni = font
+        pdf._gen = f"Édité le {dt.date.today().isoformat()} — {COMPANY_NAME}"
+        pdf.alias_nb_pages()
+
+        def tx(s):
+            return s if font == "uni" else \
+                str(s).encode("latin-1", "replace").decode("latin-1")
+
+        cols = [("ID", 12), ("Nom", 44), ("Poste", 32), ("Brut", 23),
+                ("CNSS", 19), ("AMO", 19), ("IR", 18), ("Net", 23)]
+
+        def thead():
+            pdf.set_x(10)
+            pdf.set_font(font, "B", 9)
+            pdf.set_fill_color(*brand2)
+            pdf.set_text_color(255, 255, 255)
+            for i, (lab, w) in enumerate(cols):
+                pdf.cell(w, 8, tx(lab), border=1, fill=True,
+                         align="L" if i < 3 else "R")
+            pdf.ln(8)
+            pdf.set_text_color(30, 41, 59)
+
+        def new_page():
+            pdf.add_page()
+            pdf.set_fill_color(*brand)
+            pdf.rect(0, 0, 210, 20, "F")
+            if LOGO_PATH and os.path.exists(LOGO_PATH):
+                try:
+                    pdf.image(LOGO_PATH, x=12, y=3, h=14)
+                except Exception:  # noqa: BLE001
+                    pass
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font(font, "B", 13)
+            pdf.set_xy(0, 6)
+            pdf.cell(210, 8, tx(f"État de paie — {mois}   ({COMPANY_NAME})"),
+                     align="C")
+            pdf.set_text_color(30, 41, 59)
+            pdf.set_xy(10, 26)
+            thead()
+
+        new_page()
+        tot = {"brut": 0.0, "cnss": 0.0, "amo": 0.0, "ir": 0.0, "net": 0.0}
+        fill = False
+        for rec in active:
+            if pdf.get_y() > 272:
+                new_page()
+            p = compute_payroll(rec)
+            for k in tot:
+                tot[k] += p[k]
+            vals = [rec.get("id", ""), rec.get("nom", ""), rec.get("poste", ""),
+                    fmt_money(p["brut"]), fmt_money(p["cnss"]), fmt_money(p["amo"]),
+                    fmt_money(p["ir"]), fmt_money(p["net"])]
+            pdf.set_x(10)
+            pdf.set_font(font, "", 8)
+            pdf.set_fill_color(245, 247, 249)
+            for i, (lab, w) in enumerate(cols):
+                pdf.cell(w, 7, tx(vals[i]), border=1, fill=fill,
+                         align="L" if i < 3 else "R")
+            pdf.ln(7)
+            fill = not fill
+
+        pdf.set_x(10)
+        pdf.set_font(font, "B", 9)
+        pdf.set_fill_color(*brand2)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(88, 8, tx(f"TOTAUX  ({len(active)})"), border=1, fill=True)
+        for k in ("brut", "cnss", "amo", "ir", "net"):
+            w = 23 if k in ("brut", "net") else (18 if k == "ir" else 19)
+            pdf.cell(w, 8, tx(fmt_money(tot[k])), border=1, fill=True, align="R")
+        pdf.ln(8)
+        pdf.set_text_color(30, 41, 59)
+        pdf.ln(6)
+        pdf.set_x(10)
+        pdf.set_font(font, "", 10)
+        pdf.cell(0, 8, tx("Signature et cachet :"), align="R")
+
+        out_dir = self.store.path.parent / "fiches"
+        out_dir.mkdir(exist_ok=True)
+        out_file = out_dir / f"etat_paie_{dt.date.today():%Y_%m}.pdf"
+        try:
+            pdf.output(str(out_file))
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("خطأ PDF", str(exc))
+            return
+        try:
+            os.startfile(out_file)
+        except (AttributeError, OSError):
+            webbrowser.open(out_file.as_uri())
+        self.set_status(f"État de paie PDF: {out_file.name}")
 
     def export_etat_excel(self):
         if not self.records:
